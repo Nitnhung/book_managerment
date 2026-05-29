@@ -1,0 +1,61 @@
+
+## Cấu trúc Database (MySQL)
+
+Hệ thống sử dụng 2 bảng chính để lưu trữ dữ liệu:
+
+### 1. Bảng `books` (Thông tin Sách)
+
+Bảng này lưu trữ chi tiết về từng cuốn sách trong thư viện.
+
+| Tên trường (Column Name) | Kiểu dữ liệu (Data Type) | Mô tả                                       |
+| :----------------------- | :----------------------- | :------------------------------------------ |
+| `IdBook`                 | `INT (Primary Key, AUTO_INCREMENT)` | Mã định danh duy nhất cho mỗi cuốn sách.   |
+| `nameBook`               | `VARCHAR(255)`           | Tên của cuốn sách.                          |
+| `author`                 | `VARCHAR(255)`           | Tên tác giả.                                |
+| `year`                   | `INT`                    | Năm xuất bản của sách.                      |
+| `category`               | `INT`                    | Thể loại của sách (1: CNTT, 2: Văn học, 3: Khoa học). |
+| `status`                 | `TINYINT(1)`             | Trạng thái của sách (1: Còn sách, 0: Đã mượn). |
+
+### 2. Bảng `borrow_records` (Thông tin Mượn/Trả)
+
+Bảng này ghi lại các giao dịch mượn và trả sách của sinh viên.
+
+| Tên trường (Column Name) | Kiểu dữ liệu (Data Type) | Mô tả                                       |
+| :----------------------- | :----------------------- | :------------------------------------------ |
+| `IdRent`                 | `INT (Primary Key, AUTO_INCREMENT)` | Mã định danh duy nhất cho mỗi thẻ mượn.    |
+| `IdBook`                 | `INT (Foreign Key)`      | Mã cuốn sách được mượn (liên kết với `books.IdBook`). |
+| `IdUser`                 | `INT`                    | Mã người quản lý thực hiện lập thẻ mượn.   |
+| `MSV`                    | `VARCHAR(50)`            | Mã số sinh viên mượn sách.                  |
+| `timeStart`              | `DATETIME`               | Thời điểm bắt đầu mượn sách.                |
+| `timeEnd`                | `DATETIME`               | Thời điểm dự kiến trả sách.                 |
+
+---
+
+**Lưu ý:** Kiểu dữ liệu `VARCHAR` có thể được thay thế bằng `TEXT` nếu bạn cần lưu trữ chuỗi dài hơn 255 ký tự. `TINYINT(1)` thường được dùng để lưu giá trị boolean (0 hoặc 1).
+
+---
+
+## Hướng dẫn chạy dự án
+
+### Bước 1: Khởi động MySQL Docker
+Mở Terminal và chạy lệnh sau để tạo Container MySQL:
+```bash
+docker run -d --name mysql-library -p 3307:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=yes mysql:latest
+```
+
+### Bước 2: Cài đặt và Khởi tạo Backend
+```bash
+cd backend
+npm install
+node init_db.js  # Chỉ chạy lần đầu để tạo database và bảng
+node index.js    # Chạy server API
+```
+
+### Bước 3: Cài đặt và Chạy Frontend
+Mở một Terminal mới:
+```bash
+cd frontend
+npm install
+npm run dev      # Chạy giao diện người dùng
+```
+Truy cập: http://localhost:5173

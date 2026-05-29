@@ -1,0 +1,9 @@
+.borrow-management { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+.form-container, .table-container { background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 25px; }
+.form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px; }
+input, select { padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.btn-submit { background-color: #38bdf8; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.borrow-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+.borrow-table th, .borrow-table td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; }
+.borrow-table th { background-color: #f8fafc; }
+.btn-return { background-color: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
