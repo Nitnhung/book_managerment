@@ -61,6 +61,71 @@ app.put('/api/books/:id', (req, res) => {
   });
 });
 
+// 2.3 Lấy toàn bộ danh sách sinh viên
+app.get('/api/students', (req, res) => {
+  const sql = 'SELECT * FROM students';
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
+});
+
+// 2.4 Thêm sinh viên mới
+app.post('/api/students', (req, res) => {
+  const { MSV, fullName, class: className, email } = req.body;
+  const sql = 'INSERT INTO students (MSV, fullName, class, email) VALUES (?, ?, ?, ?)';
+  
+  db.query(sql, [MSV, fullName, className, email], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Thêm sinh viên thành công!' });
+  });
+});
+
+// 2.5 Cập nhật thông tin sinh viên
+app.put('/api/students/:msv', (req, res) => {
+  const oldMsv = req.params.msv;
+  const { MSV, fullName, class: className, email } = req.body;
+  const sql = 'UPDATE students SET MSV = ?, fullName = ?, class = ?, email = ? WHERE MSV = ?';
+  
+  db.query(sql, [MSV, fullName, className, email, oldMsv], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Cập nhật sinh viên thành công!' });
+  });
+});
+
+// 2.6 Xóa sinh viên (có kiểm tra ràng buộc mượn sách)
+app.delete('/api/students/:msv', (req, res) => {
+  const msv = req.params.msv;
+  
+  // Kiểm tra xem sinh viên có đang mượn sách không
+  const checkSql = 'SELECT COUNT(*) as count FROM borrow_records WHERE MSV = ?';
+  db.query(checkSql, [msv], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    if (results[0].count > 0) {
+      return res.status(400).json({ error: 'Không thể xóa sinh viên này vì đang có thẻ mượn sách chưa trả!' });
+    }
+    
+    const deleteSql = 'DELETE FROM students WHERE MSV = ?';
+    db.query(deleteSql, [msv], (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Xóa sinh viên thành công!' });
+    });
+  });
+});
+
+// 2.2 Lấy thông tin sinh viên theo MSV
+app.get('/api/students/:msv', (req, res) => {
+  const msv = req.params.msv;
+  const sql = 'SELECT * FROM students WHERE MSV = ?';
+  
+  db.query(sql, [msv], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sinh viên' });
+    res.json(results[0]);
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Server Backend đang chạy mượt mà tại: http://localhost:${PORT}`);
 });

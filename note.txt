@@ -29,6 +29,15 @@ Bảng này ghi lại các giao dịch mượn và trả sách của sinh viên.
 | `timeStart`              | `DATETIME`               | Thời điểm bắt đầu mượn sách.                |
 | `timeEnd`                | `DATETIME`               | Thời điểm dự kiến trả sách.                 |
 
+### 3. Bảng `students` (Thông tin Sinh viên)
+
+| Tên trường (Column Name) | Kiểu dữ liệu (Data Type) | Mô tả                                       |
+| :----------------------- | :----------------------- | :------------------------------------------ |
+| `MSV`                    | `VARCHAR(50) (Primary Key)` | Mã số sinh viên (Dùng làm khóa chính).   |
+| `fullName`               | `VARCHAR(255)`           | Họ và tên sinh viên.                        |
+| `class`                  | `VARCHAR(50)`            | Lớp học.                                    |
+| `email`                  | `VARCHAR(100)`           | Địa chỉ email liên lạc.                     |
+
 ---
 
 **Lưu ý:** Kiểu dữ liệu `VARCHAR` có thể được thay thế bằng `TEXT` nếu bạn cần lưu trữ chuỗi dài hơn 255 ký tự. `TINYINT(1)` thường được dùng để lưu giá trị boolean (0 hoặc 1).

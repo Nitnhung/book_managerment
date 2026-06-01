@@ -1,0 +1,7 @@
+.borrow-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+.borrow-table th, .borrow-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+.borrow-table th { background-color: #f1f5f9; font-weight: 600; color: #475569; }
+.btn-edit { background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+.btn-delete { background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+
+

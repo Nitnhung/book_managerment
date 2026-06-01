@@ -7,7 +7,8 @@
       <form @submit.prevent="createBorrowRecord">
         <div class="form-group">
           <label>Mã sinh viên (MSV):</label>
-          <input v-model="newRecord.MSV" type="text" placeholder="Ví dụ: BH02443" required />
+          <input v-model="newRecord.MSV" @blur="checkStudent" type="text" placeholder="Ví dụ: BH02443" required />
+          <small v-if="studentName" class="student-found">👤 Sinh viên: <strong>{{ studentName }}</strong></small>
         </div>
         <div class="form-group">
           <label>Chọn Sách Mượn:</label>
@@ -53,10 +54,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 const borrowRecords = ref([])  // Danh sách thẻ mượn hiển thị trong bảng
 const availableBooks = ref([])  // Danh sách sách đang có sẵn trong kho để chọn
+const studentName = ref('')     // Hiển thị tên sinh viên khi tìm thấy
 
 // Dữ liệu cho form lập thẻ mượn
 const newRecord = ref({
@@ -101,10 +103,42 @@ onMounted(() => {
   fetchBorrowRecords()
 })
 
+// 2.1 Hàm kiểm tra thông tin sinh viên khi nhập MSV
+async function checkStudent() {
+  if (!newRecord.value.MSV) {
+    studentName.value = ''
+    return
+  }
+
+  try {
+    const response = await fetch(`http://localhost:3000/api/students/${newRecord.value.MSV}`)
+    if (response.ok) {
+      const data = await response.json()
+      studentName.value = data.fullName
+    } else {
+      studentName.value = '❌ Không tìm thấy sinh viên này!'
+    }
+  } catch (error) {
+    console.error('Lỗi kiểm tra sinh viên:', error)
+  }
+}
+
+// Xóa thông báo tên sinh viên nếu người dùng xóa sạch ô nhập MSV
+watch(() => newRecord.value.MSV, (newVal) => {
+  if (!newVal) {
+    studentName.value = ''
+  }
+})
+
 // 3. Hàm xử lý gửi dữ liệu lên API tạo thẻ mượn mới
 async function createBorrowRecord() {
   if (!newRecord.value.MSV || !newRecord.value.IdBook) {
     alert('Vui lòng điền đầy đủ Mã sinh viên và chọn Sách!')
+    return
+  }
+
+  if (studentName.value.includes('Không tìm thấy')) {
+    alert('Không thể lập thẻ cho sinh viên không tồn tại!')
     return
   }
 

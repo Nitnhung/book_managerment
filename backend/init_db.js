@@ -5,7 +5,8 @@ const connection = mysql.createConnection({
   host: 'localhost',
   port: 3307,
   user: 'root',
-  password: ''
+  password: '',
+  multipleStatements: true // Cho phép chạy nhiều câu lệnh SQL cùng lúc
 });
 
 connection.connect((err) => {
@@ -33,8 +34,15 @@ connection.connect((err) => {
         return;
       }
 
-      // Bước 4: Tạo bảng borrow_records
-      const createBorrowTableQuery = `
+    // Bước 4: Tạo các bảng cần thiết
+    const createTablesQuery = `
+      CREATE TABLE IF NOT EXISTS students (
+          MSV VARCHAR(50) PRIMARY KEY,
+          fullName VARCHAR(255) NOT NULL,
+          class VARCHAR(50),
+          email VARCHAR(100)
+      );
+
       CREATE TABLE IF NOT EXISTS borrow_records (
           IdRent INT AUTO_INCREMENT PRIMARY KEY,
           IdBook INT NOT NULL,
@@ -42,12 +50,21 @@ connection.connect((err) => {
           MSV VARCHAR(50) NOT NULL,
           timeStart DATETIME NOT NULL,
           timeEnd DATETIME NOT NULL
-      );`;
+      );
+    `;
 
-      connection.query(createBorrowTableQuery, (err) => {
+    connection.query(createTablesQuery, (err) => {
         if (err) console.error('❌ Lỗi tạo bảng:', err.message);
-        else console.log('🎉 Bảng borrow_records đã sẵn sàng!');
-        connection.end();
+      else {
+        console.log('🎉 Các bảng đã sẵn sàng!');
+        // Thêm một vài sinh viên mẫu
+        const seedStudents = `
+          INSERT IGNORE INTO students (MSV, fullName, class, email) VALUES 
+          ('BH02443', 'Nguyen Van A', 'IT1801', 'anv@fpt.edu.vn'),
+          ('BH02550', 'Tran Thi B', 'IT1802', 'btt@fpt.edu.vn');
+        `;
+        connection.query(seedStudents, () => connection.end());
+      }
       });
     });
   });

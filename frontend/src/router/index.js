@@ -2,6 +2,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import BookManagement from '../views/BookManagement.vue'
 import BorrowManagement from '../views/BorrowManagement.vue'
+import StudentManagement from '../views/StudentManagement.vue'
 
 const routes = [
   {
@@ -13,6 +14,11 @@ const routes = [
     path: '/borrows',
     name: 'Borrows',
     component: BorrowManagement
+  },
+  {
+    path: '/students', 
+    name: 'StudentManagement',
+    component: StudentManagement
   }
 ]
 

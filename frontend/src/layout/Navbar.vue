@@ -8,7 +8,7 @@
       <ul class="nav-links">
         <li><RouterLink to="/" active-class="active">Quản lý sách</RouterLink></li>
         <li><RouterLink to="/borrows" active-class="active">Quản lý mượn trả</RouterLink></li>
-        <li><a href="#">Cài đặt</a></li>
+        <li><RouterLink to="/students" active-class="active">Quản lý sinh viên</RouterLink></li>
       </ul>
     </div>
   </nav>
