@@ -1,6 +1,11 @@
 <template>
   <div class="borrow-management">
     <h2>📋 Quản lý Thẻ Mượn / Trả Sách</h2>
+
+    <div class="filter-section">
+      <input v-model="searchQuery" type="text" placeholder="🔍 Tìm kiếm theo MSV, tên sinh viên hoặc tên sách..." class="search-input" />
+    </div>
+
     
     <div class="form-container">
       <h3>Tạo Thẻ Mượn Mới</h3>
@@ -30,6 +35,8 @@
           <tr>
             <th>ID</th>
             <th>Mã Sinh Viên</th>
+            <th>Tên Sinh Viên</th>
+            <th>Lớp</th>
             <th>Tên Sách</th>
             <th>Ngày Mượn</th>
             <th>Hạn Trả / Ngày Trả</th>
@@ -37,9 +44,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="record in borrowRecords" :key="record.IdRent">
+          <tr v-for="record in filteredBorrowRecords" :key="record.IdRent">
             <td>{{ record.IdRent }}</td>
             <td>{{ record.MSV }}</td>
+            <td>{{ record.fullName }}</td>
+            <td>{{ record.class }}</td>
             <td>{{ record.nameBook }}</td>
             <td>{{ formatDate(record.timeStart) }}</td>
             <td>{{ formatDate(record.timeEnd) }}</td>
@@ -54,7 +63,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue';
+import { useValidation } from '../composables/useValidation.js'; // Thêm .js
+import api from '../api/axios.js'; // Thêm .js
+import { useSearch } from '../composables/useSearch.js'
+
+const { validate } = useValidation(); // Sử dụng composable
+
+// Định nghĩa các quy tắc kiểm tra cho thẻ mượn
+const borrowValidationRules = {
+  MSV: [
+    { type: 'required', message: 'Vui lòng nhập Mã sinh viên!' },
+    { type: 'maxLength', value: 50, message: 'Mã sinh viên không được vượt quá 50 ký tự.' }
+  ],
+  IdBook: [
+    { type: 'required', message: 'Vui lòng chọn Sách!' }
+  ]
+};
 
 const borrowRecords = ref([])  // Danh sách thẻ mượn hiển thị trong bảng
 const availableBooks = ref([])  // Danh sách sách đang có sẵn trong kho để chọn
@@ -66,11 +91,13 @@ const newRecord = ref({
   IdBook: ''
 })
 
+const { searchQuery, filteredData: filteredBorrowRecords } = useSearch(borrowRecords, ['MSV', 'fullName', 'nameBook'])
+
 // 1. Lấy danh sách sách và lọc chỉ lấy những cuốn có sẵn (isAvailable) để mượn
 async function fetchAvailableBooks() {
   try {
-    const response = await fetch('http://localhost:3000/api/books')
-    const data = await response.json()
+    const response = await api.get('/books')
+    const data = response.data
     
     // Chuyển đổi và lọc sách có sẵn
     availableBooks.value = data
@@ -89,8 +116,8 @@ async function fetchAvailableBooks() {
 // 2. Lấy danh sách các thẻ mượn đang có trong hệ thống
 async function fetchBorrowRecords() {
   try {
-    const response = await fetch('http://localhost:3000/api/borrows')
-    const data = await response.json()
+    const response = await api.get('/borrows')
+    const data = response.data
     borrowRecords.value = data
   } catch (error) {
     console.error('Lỗi lấy danh sách thẻ mượn:', error)
@@ -111,15 +138,10 @@ async function checkStudent() {
   }
 
   try {
-    const response = await fetch(`http://localhost:3000/api/students/${newRecord.value.MSV}`)
-    if (response.ok) {
-      const data = await response.json()
-      studentName.value = data.fullName
-    } else {
-      studentName.value = '❌ Không tìm thấy sinh viên này!'
-    }
+    const response = await api.get(`/students/${newRecord.value.MSV}`)
+    studentName.value = response.data.fullName
   } catch (error) {
-    console.error('Lỗi kiểm tra sinh viên:', error)
+    studentName.value = '❌ Không tìm thấy sinh viên này!'
   }
 }
 
@@ -132,9 +154,10 @@ watch(() => newRecord.value.MSV, (newVal) => {
 
 // 3. Hàm xử lý gửi dữ liệu lên API tạo thẻ mượn mới
 async function createBorrowRecord() {
-  if (!newRecord.value.MSV || !newRecord.value.IdBook) {
-    alert('Vui lòng điền đầy đủ Mã sinh viên và chọn Sách!')
-    return
+  const errors = validate(newRecord.value, borrowValidationRules);
+  if (Object.keys(errors).length > 0) {
+    alert(Object.values(errors).join('\n'));
+    return;
   }
 
   if (studentName.value.includes('Không tìm thấy')) {
@@ -143,30 +166,19 @@ async function createBorrowRecord() {
   }
 
   try {
-    // Gửi MSV và ID sách lên Backend để xử lý mượn
-    const response = await fetch('http://localhost:3000/api/borrows', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        MSV: newRecord.value.MSV,
-        IdBook: parseInt(newRecord.value.IdBook)
-      })
+    await api.post('/borrows', {
+      MSV: newRecord.value.MSV,
+      IdBook: parseInt(newRecord.value.IdBook)
     })
 
-    if (response.ok) {
-      alert('🎉 Lập thẻ mượn sách thành công!')
-      // Reset lại form nhập
-      newRecord.value.MSV = ''
-      newRecord.value.IdBook = ''
-      
-      // Cập nhật lại UI: Thêm record mới vào bảng và xóa sách vừa mượn khỏi dropdown
-      await fetchAvailableBooks()
-      await fetchBorrowRecords()
-    } else {
-      alert('Có lỗi xảy ra khi tạo thẻ mượn.')
-    }
+    alert('🎉 Lập thẻ mượn sách thành công!')
+    newRecord.value.MSV = ''
+    newRecord.value.IdBook = ''
+    
+    fetchAvailableBooks()
+    fetchBorrowRecords()
   } catch (error) {
-    console.error('Lỗi khi lập thẻ mượn:', error)
+    alert('Lỗi: ' + (error.response?.data?.error || 'Không thể lập thẻ mượn.'))
   }
 }
 
@@ -182,22 +194,28 @@ async function returnBook(id) {
   if (!confirm('Bạn có chắc chắn muốn xác nhận sinh viên này đã trả sách không?')) return
 
   try {
-    const response = await fetch(`http://localhost:3000/api/borrows/${id}`, {
-      method: 'DELETE' // Gửi yêu cầu DELETE lên API vừa viết ở Bước 1
-    })
-
-    if (response.ok) {
-      alert('🎉 Đã trả sách thành công! Cuốn sách đã được hoàn lại vào kho.')
-      
-      // Đồng bộ lại dữ liệu: sách vừa trả sẽ xuất hiện lại trong danh sách mượn
-      await fetchBorrowRecords()
-      await fetchAvailableBooks()
-    } else {
-      alert('Có lỗi xảy ra trong quá trình xử lý trả sách.')
-    }
+    await api.delete(`/borrows/${id}`)
+    alert('🎉 Đã trả sách thành công!')
+    fetchBorrowRecords()
+    fetchAvailableBooks()
   } catch (error) {
-    console.error('Lỗi khi trả sách:', error)
+    alert('Lỗi: ' + (error.response?.data?.error || 'Xử lý trả sách thất bại.'))
   }
 }
 </script>
-<style scoped src="../assets/style/BorrowManagement.css"></style>
+<style scoped>
+@import '../assets/style/BorrowManagement.css';
+
+.filter-section {
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+}
+.search-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 400px;
+}
+</style>

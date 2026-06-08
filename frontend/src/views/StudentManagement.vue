@@ -1,15 +1,42 @@
 <template>
   <div class="container">
     <section class="card-section form-section">
-      <h3>👤 Quản lý Thông tin Sinh viên</h3>
-      <form @submit.prevent="addStudent" class="book-form">
-        <input v-model="newStudent.MSV" type="text" placeholder="Mã sinh viên (MSV)" required />
-        <input v-model="newStudent.fullName" type="text" placeholder="Họ và tên" required />
-        <input v-model="newStudent.class" type="text" placeholder="Lớp (Ví dụ: IT1801)" required />
-        <input v-model="newStudent.email" type="email" placeholder="Email liên lạc" required />
-        <button type="submit" class="btn-submit">Thêm sinh viên</button>
+      <div class="form-header">
+        <h3>✨ Thêm Sinh Viên Mới</h3>
+        <p>Điền đầy đủ các thông tin bên dưới để đăng ký sinh viên vào hệ thống thư viện.</p>
+      </div>
+      <form @submit.prevent="addStudent" class="student-form-grid">
+        <div class="form-group">
+          <label>Mã số sinh viên (MSV)</label>
+          <input v-model="newStudent.MSV" type="text" placeholder="Ví dụ: BH01234" required />
+          <span v-if="formErrors.MSV" class="error-text">{{ formErrors.MSV }}</span>
+        </div>
+        <div class="form-group">
+          <label>Họ và tên</label>
+          <input v-model="newStudent.fullName" type="text" placeholder="Nhập tên đầy đủ" required />
+          <span v-if="formErrors.fullName" class="error-text">{{ formErrors.fullName }}</span>
+        </div>
+        <div class="form-group">
+          <label>Lớp học</label>
+          <input v-model="newStudent.class" type="text" placeholder="Ví dụ: IT1801" required />
+          <span v-if="formErrors.class" class="error-text">{{ formErrors.class }}</span>
+        </div>
+        <div class="form-group">
+          <label>Địa chỉ Email</label>
+          <input v-model="newStudent.email" type="email" placeholder="student@fpt.edu.vn" required />
+          <span v-if="formErrors.email" class="error-text">{{ formErrors.email }}</span>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-add-student">
+            <span>➕</span> Xác nhận thêm sinh viên
+          </button>
+        </div>
       </form>
     </section>
+
+    <div class="filter-section">
+      <input v-model="searchQuery" type="text" placeholder="🔍 Tìm kiếm sinh viên theo MSV, tên, lớp hoặc email..." class="search-input" />
+    </div>
 
     <section class="list-section">
       <table class="borrow-table">
@@ -23,7 +50,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="student in students" :key="student.MSV">
+          <tr v-for="student in filteredStudents" :key="student.MSV">
             <td>{{ student.MSV }}</td>
             <td>{{ student.fullName }}</td>
             <td>{{ student.class }}</td>
@@ -61,31 +88,64 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted } from 'vue';
+import { useValidation } from '../composables/useValidation.js'; // Thêm .js
+import api from '../api/axios.js'; // Thêm .js
+import { useSearch } from '../composables/useSearch.js'
+
+const { validate } = useValidation(); // Sử dụng composable
+
+// Định nghĩa các quy tắc kiểm tra cho sinh viên
+const studentValidationRules = {
+  MSV: [
+    { type: 'required', message: 'Vui lòng nhập Mã sinh viên!' },
+    { type: 'maxLength', value: 50, message: 'Mã sinh viên không được vượt quá 50 ký tự.' }
+  ],
+  fullName: [
+    { type: 'required', message: 'Vui lòng nhập Họ và tên!' },
+    { type: 'maxLength', value: 255, message: 'Họ và tên không được vượt quá 255 ký tự.' }
+  ],
+  class: [
+    { type: 'required', message: 'Vui lòng nhập Lớp!' },
+    { type: 'maxLength', value: 50, message: 'Lớp không được vượt quá 50 ký tự.' }
+  ],
+  email: [
+    { type: 'required', message: 'Vui lòng nhập Email!' },
+    { type: 'isEmail', message: 'Email không hợp lệ.' },
+    { type: 'maxLength', value: 100, message: 'Email không được vượt quá 100 ký tự.' }
+  ]
+};
+
+
 
 const students = ref([])
 const isEditModalOpen = ref(false)
 const newStudent = ref({ MSV: '', fullName: '', class: '', email: '' })
+const formErrors = ref({})
 const editingStudent = ref({ MSV: '', fullName: '', class: '', email: '', oldMsv: '' })
 
+const { searchQuery, filteredData: filteredStudents } = useSearch(students, ['MSV', 'fullName', 'class', 'email'])
+
 async function fetchStudents() {
-  const res = await fetch('http://localhost:3000/api/students')
-  students.value = await res.json()
+  const res = await api.get('/students')
+  students.value = res.data
 }
 
 async function addStudent() {
-  const res = await fetch('http://localhost:3000/api/students', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newStudent.value)
-  })
-  if (res.ok) {
+  const errors = validate(newStudent.value, studentValidationRules);
+  formErrors.value = errors;
+  if (Object.keys(errors).length > 0) {
+    return;
+  }
+
+  try {
+    await api.post('/students', newStudent.value)
     alert('🎉 Thêm sinh viên thành công!')
     fetchStudents()
     newStudent.value = { MSV: '', fullName: '', class: '', email: '' }
-  } else {
-    const err = await res.json()
-    alert('❌ Lỗi: ' + (err.error || 'Không thể thêm sinh viên. Có thể MSV đã tồn tại.'))
+    formErrors.value = {}
+  } catch (error) {
+    alert('❌ Lỗi: ' + (error.response?.data?.error || 'Không thể thêm sinh viên.'))
   }
 }
 
@@ -95,30 +155,119 @@ function openEditModal(student) {
 }
 
 async function updateStudent() {
-  const res = await fetch(`http://localhost:3000/api/students/${editingStudent.value.oldMsv}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(editingStudent.value)
-  })
-  if (res.ok) {
+  const errors = validate(editingStudent.value, studentValidationRules);
+  if (Object.keys(errors).length > 0) {
+    return;
+  }
+
+  try {
+    await api.put(`/students/${editingStudent.value.oldMsv}`, editingStudent.value)
     alert('✅ Cập nhật thông tin thành công!')
     isEditModalOpen.value = false
     fetchStudents()
+  } catch (error) {
+    alert('❌ Lỗi: ' + (error.response?.data?.error || 'Cập nhật thất bại.'))
   }
 }
 
 async function deleteStudent(msv) {
   if (!confirm('Xác nhận xóa sinh viên này?')) return
-  const res = await fetch(`http://localhost:3000/api/students/${msv}`, { method: 'DELETE' })
-  if (res.ok) {
+  try {
+    await api.delete(`/students/${msv}`)
     fetchStudents()
-  } else {
-    const err = await res.json()
-    alert(err.error)
+  } catch (error) {
+    alert('❌ Lỗi: ' + (error.response?.data?.error || 'Xóa thất bại.'))
   }
 }
 
 onMounted(fetchStudents)
 </script>
 
-<style scoped src="../assets/style/StudentManagement.css"></style>
+<style scoped>
+@import '../assets/style/StudentManagement.css';
+.filter-section {
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+}
+.search-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Định dạng mới cho Form Thêm Sinh Viên */
+.form-header {
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #f0f2f5;
+  padding-bottom: 1rem;
+}
+
+.form-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.5rem;
+}
+
+.form-header p {
+  margin: 0.5rem 0 0;
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.student-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #34495e;
+  font-size: 0.9rem;
+}
+
+.form-group input {
+  padding: 0.8rem;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+  border-color: #42b983;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+}
+
+.form-actions {
+  grid-column: span 2;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.btn-add-student {
+  background-color: #42b983;
+  color: white;
+  border: none;
+  padding: 0.8rem 2rem;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-add-student:hover {
+  background-color: #3aa876;
+}
+</style>

@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useValidation } from '../composables/useValidation.js'; // Thêm .js
 import BookCard from '../components/BookCard.vue'
+import api from '../api/axios.js'; // Thêm .js
+import { useSearch } from '../composables/useSearch.js'
 
 const books = ref([]) // Lưu danh sách sách từ API
-const searchQuery = ref('') // Lưu từ khóa tìm kiếm người dùng nhập
 const selectedCategory = ref('Tất cả') // Lưu bộ lọc thể loại
 
 // Chứa thông tin cho form tạo sách mới
@@ -14,6 +16,7 @@ const newBook = ref({
   year: new Date().getFullYear()
 })
 
+const formErrors = ref({}); // Thêm biến để lưu lỗi form
 const isEditModalOpen = ref(false)
 // Chứa thông tin của cuốn sách đang được chỉnh sửa trong Modal
 const editingBook = ref({
@@ -24,11 +27,36 @@ const editingBook = ref({
   year: new Date().getFullYear()
 })
 
+const { validate } = useValidation(); // Sử dụng composable
+const { searchQuery, filteredData: searchedBooks } = useSearch(books, ['title', 'author'])
+
+// Định nghĩa các quy tắc kiểm tra cho sách
+const getBookValidationRules = (currentYear) => ({
+  title: [
+    { type: 'required', message: 'Vui lòng nhập Tên sách!' },
+    { type: 'maxLength', value: 255, message: 'Tên sách không được vượt quá 255 ký tự.' }
+  ],
+  author: [
+    { type: 'required', message: 'Vui lòng nhập Tác giả!' },
+    { type: 'maxLength', value: 255, message: 'Tên tác giả không được vượt quá 255 ký tự.' }
+  ],
+  year: [
+    { type: 'required', message: 'Vui lòng nhập Năm xuất bản!' },
+    { type: 'isInteger', message: 'Năm xuất bản phải là một số nguyên.' },
+    { type: 'minYear', value: 1000, message: 'Năm xuất bản phải lớn hơn hoặc bằng 1000.' },
+    { type: 'maxYear', value: currentYear + 1, message: `Năm xuất bản không được vượt quá ${currentYear + 1}.` }
+  ]
+});
+
+
+
+
+
 // 1. Tải danh sách sách và "Map" lại dữ liệu để phù hợp với giao diện
 async function fetchBooks() {
   try {
-    const response = await fetch('http://localhost:3000/api/books')
-    const data = await response.json()
+    const response = await api.get('/books')
+    const data = response.data
     
     // Chuyển đổi dữ liệu thô từ DB thành các thuộc tính dễ hiểu cho Frontend
     books.value = data.map(b => ({
@@ -52,11 +80,12 @@ onMounted(() => {
 
 // 2. Gửi yêu cầu POST để thêm sách mới
 async function addBook() {
-  // Kiểm tra dữ liệu đầu vào cơ bản ở Frontend
-  if (!newBook.value.title || !newBook.value.author) {
-    alert('Vui lòng nhập đầy đủ thông tin!')
-    return
-  }
+  const currentYear = new Date().getFullYear();
+  const errors = validate(newBook.value, getBookValidationRules(currentYear));
+  formErrors.value = errors; // Cập nhật lỗi vào biến formErrors
+  if (Object.keys(errors).length > 0) return;
+
+  formErrors.value = {}; // Xóa lỗi nếu validation thành công
 
   try {
     const bookData = {
@@ -65,18 +94,15 @@ async function addBook() {
       year: newBook.value.year,
       category: parseInt(newBook.value.category)
     }
+    
+    const response = await api.post('/books', bookData)
 
-    const response = await fetch('http://localhost:3000/api/books', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bookData)
-    })
-
-    if (response.ok) {
-      await fetchBooks() // Làm mới danh sách sau khi thêm thành công
+    if (response.status === 200 || response.status === 201) {
+      fetchBooks()
       newBook.value.title = ''
       newBook.value.author = ''
       newBook.value.category = 1
+      newBook.value.year = new Date().getFullYear()
     }
   } catch (error) {
     console.error('Lỗi khi thêm sách:', error)
@@ -97,28 +123,26 @@ function openEditModal(book) {
 
 // 2.2 Lưu thông tin sách đã sửa
 async function updateBook() {
+  const currentYear = new Date().getFullYear();
+  const errors = validate(editingBook.value, getBookValidationRules(currentYear));
+  // Bạn có thể tạo một biến errors riêng cho modal chỉnh sửa nếu muốn
+  // Ví dụ: editFormErrors.value = errors;
+  if (Object.keys(errors).length > 0) return;
+
   try {
     // Gửi yêu cầu PUT kèm ID sách để cập nhật dữ liệu vào DB
-    const response = await fetch(`http://localhost:3000/api/books/${editingBook.value.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nameBook: editingBook.value.title,
-        author: editingBook.value.author,
-        year: editingBook.value.year,
-        category: parseInt(editingBook.value.category)
-      })
+    await api.put(`/books/${editingBook.value.id}`, {
+      nameBook: editingBook.value.title,
+      author: editingBook.value.author,
+      year: editingBook.value.year,
+      category: parseInt(editingBook.value.category)
     })
 
-    if (response.ok) {
-      alert('🎉 Cập nhật thông tin sách thành công!')
-      isEditModalOpen.value = false
-      await fetchBooks() // Reload dữ liệu để hiển thị thông tin mới nhất
-    } else {
-      alert('Có lỗi xảy ra khi cập nhật sách.')
-    }
+    alert('🎉 Cập nhật thông tin sách thành công!')
+    isEditModalOpen.value = false
+    fetchBooks()
   } catch (error) {
-    console.error('Lỗi khi cập nhật sách:', error)
+    alert('Có lỗi xảy ra: ' + (error.response?.data?.error || 'Cập nhật thất bại.'))
   }
 }
 
@@ -133,35 +157,21 @@ async function deleteBook(id) {
   if (!confirm('Bạn có chắc chắn muốn xóa cuốn sách này không?')) return
 
   try {
-    // Gửi phương thức DELETE chuẩn RESTful
-    const response = await fetch(`http://localhost:3000/api/books/${id}`, {
-      method: 'DELETE'
-    })
-
-    if (response.ok) {
-      alert('🎉 Đã xóa cuốn sách thành công!')
-      await fetchBooks() // Reload lại danh sách sau khi xóa
-    } else {
-      const errData = await response.json()
-      // Hiển thị lỗi từ Backend (ví dụ: sách đang được mượn)
-      alert('Không thể xóa: ' + (errData.error || 'Lỗi từ hệ thống Backend.'))
-    }
+    await api.delete(`/books/${id}`)
+    alert('🎉 Đã xóa cuốn sách thành công!')
+    fetchBooks()
   } catch (error) {
-    console.error('Lỗi kết nối API xóa:', error)
-    alert('Không thể kết nối đến Backend!')
+    alert('Không thể xóa: ' + (error.response?.data?.error || 'Lỗi hệ thống.'))
   }
 }
 
 // 4. Logic lọc sách (Tìm kiếm + Thể loại) mà không cần tải lại trang
 // Computed sẽ tự động tính toán lại mỗi khi searchQuery hoặc selectedCategory thay đổi
 const filteredBooks = computed(() => {
-  return books.value.filter(book => {
-    // Chuyển về chữ thường để tìm kiếm không phân biệt hoa thường
-    const matchesSearch = book.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-                          book.author.toLowerCase().includes(searchQuery.value.toLowerCase())
+  return searchedBooks.value.filter(book => {
     // Kiểm tra thể loại có khớp với lựa chọn không
     const matchesCategory = selectedCategory.value === 'Tất cả' || book.category === selectedCategory.value
-    return matchesSearch && matchesCategory
+    return matchesCategory
   })
 })
 </script>
@@ -173,13 +183,16 @@ const filteredBooks = computed(() => {
       <h3>➕ Thêm Sách Mới</h3>
       <form @submit.prevent="addBook" class="book-form">
         <input v-model="newBook.title" type="text" placeholder="Tên sách" required />
+        <span v-if="formErrors.title" class="error-text">{{ formErrors.title }}</span>
         <input v-model="newBook.author" type="text" placeholder="Tác giả" required />
+        <span v-if="formErrors.author" class="error-text">{{ formErrors.author }}</span>
         <select v-model="newBook.category">
           <option :value="1">Công nghệ thông tin</option>
           <option :value="2">Văn học</option>
           <option :value="3">Khoa học</option>
         </select>
         <input v-model.number="newBook.year" type="number" placeholder="Năm xuất bản" required />
+        <span v-if="formErrors.year" class="error-text">{{ formErrors.year }}</span>
         <button type="submit" class="btn-submit">Thêm sách</button>
       </form>
     </section>

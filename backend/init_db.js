@@ -1,4 +1,5 @@
 const mysql = require('mysql2');
+const bcrypt = require('bcryptjs');
 
 // Bước 1: Kết nối đến MySQL Server mà chưa chỉ định database
 const connection = mysql.createConnection({
@@ -43,6 +44,22 @@ connection.connect((err) => {
           email VARCHAR(100)
       );
 
+      CREATE TABLE IF NOT EXISTS books (
+          IdBook INT AUTO_INCREMENT PRIMARY KEY,
+          nameBook VARCHAR(255) NOT NULL,
+          author VARCHAR(255) NOT NULL,
+          year INT,
+          category INT,
+          status TINYINT(1) DEFAULT 1
+      );
+
+      CREATE TABLE IF NOT EXISTS librarians (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          username VARCHAR(50) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          fullName VARCHAR(255)
+      );
+
       CREATE TABLE IF NOT EXISTS borrow_records (
           IdRent INT AUTO_INCREMENT PRIMARY KEY,
           IdBook INT NOT NULL,
@@ -58,10 +75,17 @@ connection.connect((err) => {
       else {
         console.log('🎉 Các bảng đã sẵn sàng!');
         // Thêm một vài sinh viên mẫu
+        const adminPasswordHash = bcrypt.hashSync('123', 8);
+
         const seedStudents = `
           INSERT IGNORE INTO students (MSV, fullName, class, email) VALUES 
           ('BH02443', 'Nguyen Van A', 'IT1801', 'anv@fpt.edu.vn'),
           ('BH02550', 'Tran Thi B', 'IT1802', 'btt@fpt.edu.vn');
+
+          -- Thêm một thủ thư mẫu để test login (Mật khẩu là 123)
+          -- Sử dụng REPLACE để đảm bảo mật khẩu được cập nhật nếu user đã tồn tại
+          REPLACE INTO librarians (username, password, fullName) VALUES
+          ('admin', '${adminPasswordHash}', 'Quản trị viên');
         `;
         connection.query(seedStudents, () => connection.end());
       }
