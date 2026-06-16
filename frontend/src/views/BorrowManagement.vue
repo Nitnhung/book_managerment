@@ -186,7 +186,9 @@ async function createBorrowRecord() {
 function formatDate(dateStr) {
   if (!dateStr) return 'Chưa xác định'
   const d = new Date(dateStr)
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  return `${day}/${month}/${d.getFullYear()}`
 }
 
 // 5. Trả sách: Gửi yêu cầu xóa record mượn và khôi phục trạng thái sách

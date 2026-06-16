@@ -9,10 +9,15 @@ const isSidebarCollapsed = ref(false) // Trạng thái thu gọn sidebar
 // Hàm kiểm tra trạng thái đăng nhập và lấy thông tin người dùng
 const checkLoginStatus = () => {
   const user = localStorage.getItem('user')
-  if (user) {
-    loggedInUser.value = JSON.parse(user)
-  } else {
-    loggedInUser.value = null
+  try {
+    if (user) {
+      loggedInUser.value = JSON.parse(user)
+    } else {
+      loggedInUser.value = null
+    }
+  } catch (e) {
+    console.error("Lỗi phân tích JSON từ localStorage 'user':", e);
+    loggedInUser.value = null; // Đảm bảo không có lỗi nếu JSON bị hỏng
   }
 }
 
@@ -49,10 +54,12 @@ const toggleSidebar = () => {
         <h2 v-else>📚</h2>
       </div>
       <nav class="sidebar-nav">
-        <RouterLink to="/dashboard" class="nav-item" title="Dashboard">📊 <span v-if="!isSidebarCollapsed">Dashboard</span></RouterLink>
+        <RouterLink to="/" class="nav-item" title="Dashboard">📊 <span v-if="!isSidebarCollapsed">Dashboard</span></RouterLink>
+
         <RouterLink to="/" class="nav-item" title="Quản lý Sách">📖 <span v-if="!isSidebarCollapsed">Quản lý Sách</span></RouterLink>
-        <RouterLink to="/borrows" class="nav-item" title="Mượn / Trả Sách">📋 <span v-if="!isSidebarCollapsed">Mượn / Trả Sách</span></RouterLink>
-        <RouterLink to="/students" class="nav-item" title="Quản lý Sinh viên">👤 <span v-if="!isSidebarCollapsed">Quản lý Sinh viên</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrows" class="nav-item" title="Mượn / Trả Sách">📋 <span v-if="!isSidebarCollapsed">Mượn / Trả Sách</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'admin'" to="/borrows?history=true" class="nav-item" title="Lịch sử mượn">🕒 <span v-if="!isSidebarCollapsed">Lịch sử mượn</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/students" class="nav-item" title="Quản lý Sinh viên">👤 <span v-if="!isSidebarCollapsed">Quản lý Sinh viên</span></RouterLink>
       </nav>
     </aside>
 
@@ -80,38 +87,22 @@ const toggleSidebar = () => {
 <style scoped>
 /* Reset CSS toàn cục: Đảm bảo trang web không có lề thừa và phủ kín màn hình */
 :global(html), :global(body), :global(#app) {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  min-height: 100vh;
-  box-sizing: border-box;
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  overflow-x: hidden; /* Ngăn chặn cuộn ngang bất thường */
-}
-
-:global(*) {
-  box-sizing: inherit;
-}
-
-/* Ép tất cả các container chính và các phân đoạn trong trang luôn giãn full 100% màn hình */
-:global(.container), 
-:global(.borrow-management), 
-:global(.card-section), 
-:global(.form-container), 
-:global(.table-container), 
-:global(.list-section) {
-  width: 100% !important;
-  max-width: none !important; /* Gỡ bỏ mọi giới hạn chiều rộng tối đa (ví dụ 1200px) */
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  display: block !important;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100vh;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f4f7f6;
 }
 
 /* Thiết lập khung layout tổng thể */
 .app-layout {
   display: flex;
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 100vh; /* Quan trọng: Đảm bảo layout luôn cao ít nhất bằng màn hình */
   background-color: #f4f7f6;
   transition: all 0.3s ease;
 }
@@ -129,7 +120,7 @@ const toggleSidebar = () => {
   height: 100vh;
   box-shadow: 2px 0 5px rgba(0,0,0,0.1);
   z-index: 1000; /* Đảm bảo sidebar luôn nằm trên các nội dung khác */
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, transform 0.3s ease;
 }
 
 /* Khi sidebar bị thu gọn */
@@ -170,7 +161,7 @@ const toggleSidebar = () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  width: 100vw; /* Ép container chính theo chiều rộng thiết bị */
+  min-height: 100vh;
   min-width: 0;
 }
 
@@ -182,20 +173,20 @@ const toggleSidebar = () => {
 
 .app-layout.logged-in .main-container {
   margin-left: 260px; /* Tạo khoảng trống cho sidebar khi đã đăng nhập */
-  width: calc(100vw - 260px); /* Tính toán chính xác phần còn lại của màn hình */
+  width: calc(100% - 260px); /* Sử dụng 100% thay vì 100vw để tránh tràn màn hình khi có thanh cuộn */
   transition: margin-left 0.3s ease, width 0.3s ease;
 }
 
 .app-layout.collapsed .main-container {
   margin-left: 80px;
-  width: calc(100vw - 80px);
+  width: calc(100% - 80px);
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .btn-toggle {
@@ -205,11 +196,25 @@ const toggleSidebar = () => {
   cursor: pointer;
   font-size: 1.2rem;
   border-radius: 4px;
+  flex-shrink: 0; /* Đảm bảo nút không bị co lại */
+}
+
+.user-info {
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* Hiển thị dấu ... nếu tên quá dài */
+  min-width: 0;
+  color: #2c3e50;
 }
 
 .content-area {
   flex: 1;
   padding: 2rem;
+  min-height: 0; /* Cho phép nội dung cuộn nếu quá dài */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .app-footer {
@@ -221,12 +226,53 @@ const toggleSidebar = () => {
   font-size: 0.9rem;
 }
 
-.btn-logout { background-color: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+.btn-logout { 
+  background-color: #dc3545; 
+  color: white; 
+  border: none; 
+  padding: 0.5rem 1rem; 
+  border-radius: 4px; 
+  cursor: pointer; 
+  flex-shrink: 0; /* Đảm bảo nút đăng xuất luôn giữ nguyên kích thước */
+}
+
 .btn-logout:hover { background-color: #c82333; }
 .error-text {
   color: #ff4d4d;
   font-size: 0.85rem;
   margin-top: 0.3rem;
   display: block;
+}
+
+/* --- Cấu hình Responsive (Giao diện thích ứng) --- */
+
+/* Cho máy tính bảng (Dưới 1024px) */
+@media (max-width: 1024px) {
+  .sidebar { width: 220px; }
+  .app-layout.logged-in .main-container { margin-left: 220px; width: calc(100% - 220px); }
+  .app-layout.collapsed .sidebar { width: 70px; }
+  .app-layout.collapsed .main-container { margin-left: 70px; width: calc(100% - 70px); }
+}
+
+/* Cho điện thoại di động (Dưới 768px) */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%); /* Mặc định ẩn sidebar ra ngoài màn hình bên trái */
+    width: 260px;
+  }
+
+  /* Trên mobile, khi bấm nút Toggle (nút ☰), sidebar sẽ trượt vào */
+  .app-layout.collapsed .sidebar {
+    transform: translateX(0);
+  }
+
+  .app-layout.logged-in .main-container {
+    margin-left: 0; /* Nội dung chính chiếm toàn bộ chiều rộng màn hình */
+    width: 100%;
+  }
+
+  .content-area {
+    padding: 1rem; /* Giảm bớt padding để nội dung to hơn trên điện thoại */
+  }
 }
 </style>
