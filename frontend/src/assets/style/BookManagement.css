@@ -1,8 +1,33 @@
 .container {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0 20px;
 }
+
+.list-section {
+  margin-top: 10px;
+}
+
+.h2,
+h2 {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+h3,
+.list-title {
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.card-section {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+  margin-bottom: 20px;
+}
+
 .card-section {
   background: white;
   padding: 20px;

@@ -1,7 +1,59 @@
-.borrow-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-.borrow-table th, .borrow-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-.borrow-table th { background-color: #f1f5f9; font-weight: 600; color: #475569; }
-.btn-edit { background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
-.btn-delete { background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+/* Table */
+.student-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+}
+
+.student-table th,
+.student-table td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.student-table th {
+  background-color: #f1f5f9;
+  color: #334155;
+  font-weight: 700;
+}
+
+.student-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Buttons */
+.btn-edit {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.btn-edit:hover {
+  background: #2563eb;
+}
+
+.btn-delete {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.btn-delete:hover {
+  background: #dc2626;
+}
+
+
+
 
 
