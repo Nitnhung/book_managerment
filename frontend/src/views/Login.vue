@@ -34,7 +34,12 @@ async function handleLogin() {
     localStorage.setItem('user', JSON.stringify(data.user))
     
     alert('🎉 Đăng nhập thành công!')
-    router.push('/') // Chuyển hướng về trang chủ hoặc trang quản lý sách
+    // Sinh viên -> trang lịch sử mượn; thủ thư/admin -> trang quản lý
+    if (data.user?.role === 'student') {
+      router.push('/my-borrows')
+    } else {
+      router.push('/')
+    }
   } catch (error) {
     console.error('Lỗi đăng nhập:', error)
     loginError.value = error.response?.data?.error || 'Không thể kết nối đến máy chủ.'
@@ -45,7 +50,8 @@ async function handleLogin() {
 <template>
   <div class="login-container">
     <div class="login-card">
-      <h2>🔐 Đăng nhập Thủ thư</h2>
+      <h2>🔐 Đăng nhập hệ thống</h2>
+      <p class="login-hint">Thủ thư dùng tài khoản được cấp. Sinh viên đăng nhập bằng Mã sinh viên (MSV).</p>
       <form @submit.prevent="handleLogin">
         <div class="form-group">
           <label>Tài khoản</label>
@@ -82,6 +88,7 @@ async function handleLogin() {
   width: 100%;
   max-width: 400px;
 }
+.login-hint { color: #777; font-size: 0.85rem; margin: -0.5rem 0 1.2rem; text-align: center; }
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
 .form-group input { width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
