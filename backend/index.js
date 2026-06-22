@@ -300,7 +300,7 @@ app.get('/api/students', verifyToken, authorize(['admin', 'librarian']), (req, r
     const totalItems = countResults[0].total;
     const totalPages = Math.ceil(totalItems / limit);
 
-    const sql = `SELECT * FROM students ${whereClause} LIMIT ? OFFSET ?`;
+    const sql = `SELECT MSV, fullName, class, email FROM students ${whereClause} LIMIT ? OFFSET ?`;
     const finalParams = [...queryParams, Number(limit), Number(offset)];
 
     db.query(sql, finalParams, (err, results) => {
@@ -378,7 +378,7 @@ app.delete('/api/students/:msv', verifyToken, authorize(['admin', 'librarian']),
 // 2.2 Lấy thông tin sinh viên theo MSV
 app.get('/api/students/:msv', (req, res) => {
   const msv = req.params.msv;
-  const sql = 'SELECT * FROM students WHERE MSV = ?';
+  const sql = 'SELECT MSV, fullName, class, email FROM students WHERE MSV = ?';
   
   db.query(sql, [msv], (err, results) => {
     if (err) return res.status(500).json({ error: err.message });

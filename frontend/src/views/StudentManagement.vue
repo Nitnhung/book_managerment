@@ -39,29 +39,39 @@
     </div>
 
     <section class="list-section">
-      <table class="borrow-table">
-        <thead>
-          <tr>
-            <th>MSV</th>
-            <th>Họ và Tên</th>
-            <th>Lớp</th>
-            <th>Email</th>
-            <th>Hành động</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="student in filteredStudents" :key="student.MSV">
-            <td>{{ student.MSV }}</td>
-            <td>{{ student.fullName }}</td>
-            <td>{{ student.class }}</td>
-            <td>{{ student.email }}</td>
-            <td>
-              <button @click="openEditModal(student)" class="btn-edit">Sửa</button>
-              <button @click="deleteStudent(student.MSV)" class="btn-delete">Xóa</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <h3 class="list-title">Danh sách sinh viên ({{ filteredStudents.length }})</h3>
+
+      <div v-if="filteredStudents.length === 0" class="empty-list">
+        Không tìm thấy sinh viên nào phù hợp.
+      </div>
+
+      <template v-else>
+        <table class="student-table">
+          <thead>
+            <tr>
+              <th>MSV</th>
+              <th>Họ và Tên</th>
+              <th>Lớp</th>
+              <th>Email</th>
+              <th>Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="student in paginatedStudents" :key="student.MSV">
+              <td>{{ student.MSV }}</td>
+              <td>{{ student.fullName }}</td>
+              <td>{{ student.class }}</td>
+              <td>{{ student.email }}</td>
+              <td>
+                <button @click="openEditModal(student)" class="btn-edit">Sửa</button>
+                <button @click="deleteStudent(student.MSV)" class="btn-delete">Xóa</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <Pagination v-model:currentPage="currentPage" :total-pages="totalPages" />
+      </template>
     </section>
 
     <!-- Modal Sửa Sinh viên -->
@@ -88,10 +98,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useValidation } from '../composables/useValidation.js'; // Thêm .js
 import api from '../api/axios.js'; // Thêm .js
 import { useSearch } from '../composables/useSearch.js'
+import Pagination from '../components/Pagination.vue'
 
 const { validate } = useValidation(); // Sử dụng composable
 
@@ -126,9 +137,24 @@ const editingStudent = ref({ MSV: '', fullName: '', class: '', email: '', oldMsv
 
 const { searchQuery, filteredData: filteredStudents } = useSearch(students, ['MSV', 'fullName', 'class', 'email'])
 
+// Phân trang (client-side) đồng bộ với các trang khác
+const currentPage = ref(1)
+const pageSize = 8
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredStudents.value.length / pageSize)))
+const paginatedStudents = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredStudents.value.slice(start, start + pageSize)
+})
+
+// Khi tìm kiếm hoặc dữ liệu đổi, đưa về trang 1 nếu trang hiện tại vượt quá
+watch([filteredStudents], () => {
+  if (currentPage.value > totalPages.value) currentPage.value = 1
+})
+
 async function fetchStudents() {
-  const res = await api.get('/students')
-  students.value = res.data
+  // Lấy toàn bộ sinh viên rồi phân trang phía client
+  const res = await api.get('/students', { params: { limit: 1000 } })
+  students.value = res.data?.data || []
 }
 
 async function addStudent() {

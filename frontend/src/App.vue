@@ -205,11 +205,12 @@ const toggleSidebar = () => {
 
 .user-info {
   flex: 1;
-  text-align: right;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis; /* Hiển thị dấu ... nếu tên quá dài */
   min-width: 0;
+  padding: 0 1rem; /* Tạo khoảng cách để không đè lên nút hai bên */
   color: #2c3e50;
 }
 
