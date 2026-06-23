@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useValidation } from '../composables/useValidation.js'; // Thêm .js
 import BookCard from '../components/BookCard.vue'
+import Pagination from '../components/Pagination.vue'
 import api from '../api/axios.js'; // Thêm .js
 import { useSearch } from '../composables/useSearch.js'
 
@@ -55,8 +56,8 @@ const getBookValidationRules = (currentYear) => ({
 // 1. Tải danh sách sách và "Map" lại dữ liệu để phù hợp với giao diện
 async function fetchBooks() {
   try {
-    const response = await api.get('/books')
-    const data = response.data
+    const response = await api.get('/books', { params: { limit: 1000 } })
+    const data = response.data?.data || []
     
     // Chuyển đổi dữ liệu thô từ DB thành các thuộc tính dễ hiểu cho Frontend
     books.value = data.map(b => ({
@@ -66,7 +67,9 @@ async function fetchBooks() {
       category: b.category === 1 ? 'Công nghệ thông tin' : b.category === 2 ? 'Văn học' : 'Khoa học',
       categoryId: b.category,
       year: b.year,
-      isAvailable: b.status === 1 || b.status === true || b.status === '1'
+      isAvailable: b.availableQuantity !== undefined
+        ? Number(b.availableQuantity) > 0
+        : (b.status === 1 || b.status === true || b.status === '1')
     }))
   } catch (error) {
     console.error('Lỗi khi lấy danh sách sách:', error)
@@ -174,6 +177,18 @@ const filteredBooks = computed(() => {
     return matchesCategory
   })
 })
+
+// Phân trang (client-side) đồng bộ với các trang khác
+const currentPage = ref(1)
+const pageSize = 6
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredBooks.value.length / pageSize)))
+const paginatedBooks = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredBooks.value.slice(start, start + pageSize)
+})
+watch(filteredBooks, () => {
+  if (currentPage.value > totalPages.value) currentPage.value = 1
+})
 </script>
 
 <template>
@@ -216,13 +231,15 @@ const filteredBooks = computed(() => {
 
       <div class="book-grid" v-else>
         <BookCard 
-          v-for="book in filteredBooks" 
+          v-for="book in paginatedBooks" 
           :key="book.id" 
           :book="book"
           @delete-book="deleteBook"
           @edit-book="openEditModal"
         />
       </div>
+
+      <Pagination v-model:currentPage="currentPage" :total-pages="totalPages" />
     </section>
 
     <!-- Modal Sửa Sách -->

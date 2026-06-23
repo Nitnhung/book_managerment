@@ -44,7 +44,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="record in filteredBorrowRecords" :key="record.IdRent">
+          <tr v-for="record in paginatedBorrowRecords" :key="record.IdRent">
             <td>{{ record.IdRent }}</td>
             <td>{{ record.MSV }}</td>
             <td>{{ record.fullName }}</td>
@@ -58,15 +58,18 @@
           </tr>
         </tbody>
       </table>
+
+      <Pagination v-model:currentPage="currentPage" :total-pages="totalPages" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useValidation } from '../composables/useValidation.js'; // Thêm .js
 import api from '../api/axios.js'; // Thêm .js
 import { useSearch } from '../composables/useSearch.js'
+import Pagination from '../components/Pagination.vue'
 
 const { validate } = useValidation(); // Sử dụng composable
 
@@ -93,18 +96,32 @@ const newRecord = ref({
 
 const { searchQuery, filteredData: filteredBorrowRecords } = useSearch(borrowRecords, ['MSV', 'fullName', 'nameBook'])
 
+// Phân trang (client-side) đồng bộ với các trang khác
+const currentPage = ref(1)
+const pageSize = 8
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredBorrowRecords.value.length / pageSize)))
+const paginatedBorrowRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredBorrowRecords.value.slice(start, start + pageSize)
+})
+watch(filteredBorrowRecords, () => {
+  if (currentPage.value > totalPages.value) currentPage.value = 1
+})
+
 // 1. Lấy danh sách sách và lọc chỉ lấy những cuốn có sẵn (isAvailable) để mượn
 async function fetchAvailableBooks() {
   try {
-    const response = await api.get('/books')
-    const data = response.data
+    const response = await api.get('/books', { params: { limit: 1000 } })
+    const data = response.data?.data || []
     
-    // Chuyển đổi và lọc sách có sẵn
+    // Chuyển đổi và lọc sách còn sẵn trong kho
     availableBooks.value = data
       .map(b => ({
         IdBook: b.IdBook,
         nameBook: b.nameBook,
-        isAvailable: b.status === 1 || b.status === true || b.status === '1'
+        isAvailable: b.availableQuantity !== undefined
+          ? Number(b.availableQuantity) > 0
+          : (b.status === 1 || b.status === true || b.status === '1')
       }))
       .filter(book => book.isAvailable)
   } catch (error) {
@@ -116,9 +133,8 @@ async function fetchAvailableBooks() {
 // 2. Lấy danh sách các thẻ mượn đang có trong hệ thống
 async function fetchBorrowRecords() {
   try {
-    const response = await api.get('/borrows')
-    const data = response.data
-    borrowRecords.value = data
+    const response = await api.get('/borrows', { params: { limit: 1000 } })
+    borrowRecords.value = response.data?.data || []
   } catch (error) {
     console.error('Lỗi lấy danh sách thẻ mượn:', error)
   }

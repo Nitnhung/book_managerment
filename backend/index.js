@@ -63,6 +63,7 @@ const verifyToken = (req, res, next) => {
     if (err) return res.status(401).json({ error: 'Token không hợp lệ hoặc đã hết hạn.' });
     req.userId = decoded.id; // Lưu id người dùng vào request để dùng sau
     req.userRole = decoded.role; // Lưu role để phân quyền
+    req.userMSV = decoded.MSV; // Mã sinh viên (chỉ có với tài khoản sinh viên)
     next();
   });
 };
@@ -82,7 +83,9 @@ app.post('/api/login', (req, res) => {
   const sql = 'SELECT * FROM librarians WHERE username = ?';
   db.query(sql, [username], (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
-    if (results.length === 0) return res.status(401).json({ error: 'Tài khoản không tồn tại!' });
+
+    // Nếu không phải thủ thư/admin, thử đăng nhập với vai trò sinh viên (dùng MSV)
+    if (results.length === 0) return loginAsStudent(username, password, res);
 
     const user = results[0];
 
@@ -102,6 +105,36 @@ app.post('/api/login', (req, res) => {
     });
   });
 });
+
+// 1.0 Hàm hỗ trợ: Đăng nhập với vai trò Sinh viên (username chính là MSV)
+function loginAsStudent(username, password, res) {
+  const sql = 'SELECT * FROM students WHERE MSV = ?';
+  db.query(sql, [username], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (results.length === 0) return res.status(401).json({ error: 'Tài khoản không tồn tại!' });
+
+    const student = results[0];
+
+    // Sinh viên đăng nhập bằng mật khẩu đã được cấp.
+    // Nếu chưa có mật khẩu (null), mặc định dùng chính MSV làm mật khẩu.
+    const passwordIsValid = student.password
+      ? bcrypt.compareSync(password, student.password)
+      : password === student.MSV;
+    if (!passwordIsValid) return res.status(401).json({ error: 'Mật khẩu không chính xác!' });
+
+    const token = jwt.sign(
+      { id: student.MSV, MSV: student.MSV, role: 'student' },
+      SECRET_KEY,
+      { expiresIn: 7200 }
+    );
+
+    res.json({
+      message: 'Đăng nhập thành công!',
+      accessToken: token,
+      user: { id: student.MSV, MSV: student.MSV, username: student.MSV, fullName: student.fullName, class: student.class, email: student.email, role: 'student' }
+    });
+  });
+}
 
 // 1.2 Middleware phân quyền (Kiểm tra vai trò)
 const authorize = (roles = []) => {
@@ -267,7 +300,7 @@ app.get('/api/students', verifyToken, authorize(['admin', 'librarian']), (req, r
     const totalItems = countResults[0].total;
     const totalPages = Math.ceil(totalItems / limit);
 
-    const sql = `SELECT * FROM students ${whereClause} LIMIT ? OFFSET ?`;
+    const sql = `SELECT MSV, fullName, class, email FROM students ${whereClause} LIMIT ? OFFSET ?`;
     const finalParams = [...queryParams, Number(limit), Number(offset)];
 
     db.query(sql, finalParams, (err, results) => {
@@ -345,7 +378,7 @@ app.delete('/api/students/:msv', verifyToken, authorize(['admin', 'librarian']),
 // 2.2 Lấy thông tin sinh viên theo MSV
 app.get('/api/students/:msv', (req, res) => {
   const msv = req.params.msv;
-  const sql = 'SELECT * FROM students WHERE MSV = ?';
+  const sql = 'SELECT MSV, fullName, class, email FROM students WHERE MSV = ?';
   
   db.query(sql, [msv], (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -419,13 +452,10 @@ app.get('/api/borrows', verifyToken, authorize(['admin', 'librarian', 'student']
     queryParams.push(searchPattern, searchPattern, searchPattern);
   }
 
-    // Nếu là sinh viên, chỉ cho xem lịch sử mượn của chính mình.
-    // Lưu ý: hiện token đang chỉ chứa username (từ bảng librarians), KHÔNG chắc chắn username đó chính là MSV.
-    // Để tránh trả sai dữ liệu rỗng/sai, ta lọc theo MSV lấy từ bảng students nếu có match.
+    // Nếu là sinh viên, chỉ cho xem thẻ mượn của chính mình (lọc theo MSV trong token).
   if (req.userRole === 'student') {
-    whereClause += ' AND br.MSV IN (SELECT MSV FROM students WHERE email = ? OR fullName = ? OR class = ? OR MSV = ?)';
-    // Trả về dữ liệu phù hợp nếu username trùng MSV hoặc trùng một trường trong students.
-    queryParams.push(req.user.username, req.user.username, req.user.username, req.user.username);
+    whereClause += ' AND br.MSV = ?';
+    queryParams.push(req.userMSV);
   }
 
   const countSql = `
@@ -463,6 +493,27 @@ app.get('/api/borrows', verifyToken, authorize(['admin', 'librarian', 'student']
         currentPage: page
       });
     });
+  });
+});
+
+// 5.1 API: Sinh viên xem lịch sử mượn sách của chính mình (cả đang mượn lẫn đã trả)
+app.get('/api/my-borrows', verifyToken, authorize(['student']), (req, res) => {
+  const MSV = req.userMSV;
+  if (!MSV) return res.status(400).json({ error: 'Không xác định được mã sinh viên từ tài khoản.' });
+
+  const sql = `
+    SELECT br.IdRent, br.IdBook, br.MSV, br.timeStart, br.timeEnd,
+           br.returnActualDate, br.status,
+           b.nameBook, b.author
+    FROM borrow_records br
+    JOIN books b ON br.IdBook = b.IdBook
+    WHERE br.MSV = ?
+    ORDER BY br.status DESC, br.timeStart DESC
+  `;
+
+  db.query(sql, [MSV], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ data: results, totalItems: results.length });
   });
 });
 
