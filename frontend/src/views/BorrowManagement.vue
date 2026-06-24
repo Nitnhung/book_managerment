@@ -1,97 +1,95 @@
 <template>
   <div class="borrow-management">
-    <h2>📋 Quản lý Thẻ Mượn / Trả Sách</h2>
+    <!-- Header với nút lập thẻ mượn -->
+    <div class="page-header">
+      <h2>📋 Quản lý Thẻ Mượn / Trả Sách</h2>
+      <button @click="openBorrowModal" class="btn-add">➕ Lập Thẻ Mượn Mới</button>
+    </div>
 
+    <!-- Bộ lọc -->
     <div class="filter-section">
       <input v-model="searchQuery" type="text" placeholder="🔍 Tìm kiếm theo MSV, tên sinh viên hoặc tên sách..." class="search-input" />
     </div>
 
-    
-    <div class="form-container">
-      <h3>Tạo Thẻ Mượn Mới</h3>
-      <form @submit.prevent="createBorrowRecord">
-        <div class="form-group">
-          <label>Mã sinh viên (MSV):</label>
-          <input v-model="newRecord.MSV" @blur="checkStudent" type="text" placeholder="Ví dụ: BH02443" required />
-          <small v-if="studentName" class="student-found">👤 Sinh viên: <strong>{{ studentName }}</strong></small>
-        </div>
-        <div class="form-group">
-          <label>Chọn Sách Mượn:</label>
-          <select v-model="newRecord.IdBook" required>
-            <option value="" disabled>-- Chọn cuốn sách --</option>
-            <option v-for="book in availableBooks" :key="book.IdBook" :value="book.IdBook">
-              {{ book.nameBook }}
-            </option>
-          </select>
-        </div>
-        <button type="submit" class="btn-submit">Lập Thẻ Mượn</button>
-      </form>
+    <!-- Danh sách thẻ mượn -->
+    <div class="table-container">
+      <h3>Danh sách sinh viên đang mượn sách</h3>
+      
+      <div v-if="searchedRecords.length === 0" class="empty-list">
+        Không tìm thấy thẻ mượn nào.
+      </div>
+
+      <div v-else>
+        <table class="borrow-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Mã Sinh Viên</th>
+              <th>Tên Sinh Viên</th>
+              <th>Lớp</th>
+              <th>Tên Sách</th>
+              <th>Ngày bắt đầu</th>
+              <th>Ngày kết thúc</th>
+              <th>Hành Động</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="record in paginatedItems" :key="record.IdRent">
+              <td>{{ record.IdRent }}</td>
+              <td>{{ record.MSV }}</td>
+              <td>{{ record.fullName }}</td>
+              <td>{{ record.class }}</td>
+              <td>{{ record.nameBook }}</td>
+              <td>{{ formatDate(record.timeStart, 'Chưa xác định') }}</td>
+              <td>{{ formatDate(record.timeEnd, 'Chưa xác định') }}</td>
+              <td>
+                <button @click="returnBook(record.IdRent)" class="btn-return">Trả Sách</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Phân trang -->
+        <Pagination
+          :current-page="currentPage"
+          :total-pages="Math.ceil(searchedRecords.length / pageSize)"
+          :page-size="pageSize"
+          @page-change="handlePageChange"
+          @page-size-change="handlePageSizeChange"
+        />
+      </div>
     </div>
 
-    <div class="table-container">
-      <h3>Danh Sách Sinh Viên Đang Mượn Sách</h3>
-      <table class="borrow-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Mã Sinh Viên</th>
-            <th>Tên Sinh Viên</th>
-            <th>Lớp</th>
-            <th>Tên Sách</th>
-            <th>Ngày Mượn</th>
-            <th>Hạn Trả / Ngày Trả</th>
-            <th>Hành Động</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="record in filteredBorrowRecords" :key="record.IdRent">
-            <td>{{ record.IdRent }}</td>
-            <td>{{ record.MSV }}</td>
-            <td>{{ record.fullName }}</td>
-            <td>{{ record.class }}</td>
-            <td>{{ record.nameBook }}</td>
-            <td>{{ formatDate(record.timeStart) }}</td>
-            <td>{{ formatDate(record.timeEnd) }}</td>
-            <td>
-              <button @click="returnBook(record.IdRent)" class="btn-return">Trả Sách</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- BorrowModal Component -->
+    <BorrowModal
+      :is-open="isBorrowModalOpen"
+      mode="direct"
+      :available-books="availableBooks"
+      :all-students="allStudents"
+      @close="isBorrowModalOpen = false"
+      @submit="handleBorrowSubmit"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
-import { useValidation } from '../composables/useValidation.js'; // Thêm .js
-import api from '../api/axios.js'; // Thêm .js
+import { ref, onMounted } from 'vue'
+import { usePagination } from '../composables/usePagination.js'
 import { useSearch } from '../composables/useSearch.js'
+import Pagination from '../components/Pagination.vue'
+import BorrowModal from '../components/BorrowModal.vue'
+import api from '../api/axios.js'
+import { formatDate } from '../utils/formatDate.js'
 
-const { validate } = useValidation(); // Sử dụng composable
+const borrowRecords = ref([])
+const availableBooks = ref([])
+const allStudents = ref([])
+const isBorrowModalOpen = ref(false)
 
-// Định nghĩa các quy tắc kiểm tra cho thẻ mượn
-const borrowValidationRules = {
-  MSV: [
-    { type: 'required', message: 'Vui lòng nhập Mã sinh viên!' },
-    { type: 'maxLength', value: 50, message: 'Mã sinh viên không được vượt quá 50 ký tự.' }
-  ],
-  IdBook: [
-    { type: 'required', message: 'Vui lòng chọn Sách!' }
-  ]
-};
+const { searchQuery, filteredData: searchedRecords } = useSearch(borrowRecords, ['MSV', 'fullName', 'nameBook'])
 
-const borrowRecords = ref([])  // Danh sách thẻ mượn hiển thị trong bảng
-const availableBooks = ref([])  // Danh sách sách đang có sẵn trong kho để chọn
-const studentName = ref('')     // Hiển thị tên sinh viên khi tìm thấy
-
-// Dữ liệu cho form lập thẻ mượn
-const newRecord = ref({
-  MSV: '',
-  IdBook: ''
-})
-
-const { searchQuery, filteredData: filteredBorrowRecords } = useSearch(borrowRecords, ['MSV', 'fullName', 'nameBook'])
+// Sử dụng phân trang
+const { currentPage, pageSize, paginatedItems, goToPage, changePageSize } = usePagination(searchedRecords, 10)
 
 // 1. Lấy danh sách sách và lọc chỉ lấy những cuốn có sẵn (isAvailable) để mượn
 async function fetchAvailableBooks() {
@@ -124,74 +122,45 @@ async function fetchBorrowRecords() {
   }
 }
 
-// Chạy tự động tải dữ liệu khi người dùng vừa truy cập vào trang này
+// 3. Lấy danh sách sinh viên
+async function fetchAllStudents() {
+  try {
+    const response = await api.get('/students')
+    allStudents.value = response.data
+  } catch (error) {
+    console.error('Lỗi lấy danh sách sinh viên:', error)
+  }
+}
+
 onMounted(() => {
   fetchAvailableBooks()
   fetchBorrowRecords()
+  fetchAllStudents()
 })
 
-// 2.1 Hàm kiểm tra thông tin sinh viên khi nhập MSV
-async function checkStudent() {
-  if (!newRecord.value.MSV) {
-    studentName.value = ''
-    return
-  }
-
-  try {
-    const response = await api.get(`/students/${newRecord.value.MSV}`)
-    studentName.value = response.data.fullName
-  } catch (error) {
-    studentName.value = '❌ Không tìm thấy sinh viên này!'
-  }
+function openBorrowModal() {
+  isBorrowModalOpen.value = true
 }
 
-// Xóa thông báo tên sinh viên nếu người dùng xóa sạch ô nhập MSV
-watch(() => newRecord.value.MSV, (newVal) => {
-  if (!newVal) {
-    studentName.value = ''
-  }
-})
-
-// 3. Hàm xử lý gửi dữ liệu lên API tạo thẻ mượn mới
-async function createBorrowRecord() {
-  const errors = validate(newRecord.value, borrowValidationRules);
-  if (Object.keys(errors).length > 0) {
-    alert(Object.values(errors).join('\n'));
-    return;
-  }
-
-  if (studentName.value.includes('Không tìm thấy')) {
-    alert('Không thể lập thẻ cho sinh viên không tồn tại!')
-    return
-  }
-
+async function handleBorrowSubmit(data) {
   try {
     await api.post('/borrows', {
-      MSV: newRecord.value.MSV,
-      IdBook: parseInt(newRecord.value.IdBook)
+      MSV: data.MSV,
+      IdBook: data.IdBook,
+      borrow_date: data.borrow_date,
+      due_date: data.due_date
     })
 
     alert('🎉 Lập thẻ mượn sách thành công!')
-    newRecord.value.MSV = ''
-    newRecord.value.IdBook = ''
-    
+    isBorrowModalOpen.value = false
     fetchAvailableBooks()
     fetchBorrowRecords()
   } catch (error) {
-    alert('Lỗi: ' + (error.response?.data?.error || 'Không thể lập thẻ mượn.'))
+    alert('❌ Lỗi: ' + (error.response?.data?.error || 'Không thể lập thẻ mượn.'))
   }
 }
 
-// 4. Chuyển đổi định dạng ngày ISO từ server sang dạng DD/MM/YYYY cho người dùng
-function formatDate(dateStr) {
-  if (!dateStr) return 'Chưa xác định'
-  const d = new Date(dateStr)
-  const day = String(d.getDate()).padStart(2, '0')
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  return `${day}/${month}/${d.getFullYear()}`
-}
 
-// 5. Trả sách: Gửi yêu cầu xóa record mượn và khôi phục trạng thái sách
 async function returnBook(id) {
   if (!confirm('Bạn có chắc chắn muốn xác nhận sinh viên này đã trả sách không?')) return
 
@@ -201,23 +170,135 @@ async function returnBook(id) {
     fetchBorrowRecords()
     fetchAvailableBooks()
   } catch (error) {
-    alert('Lỗi: ' + (error.response?.data?.error || 'Xử lý trả sách thất bại.'))
+    alert('❌ Lỗi: ' + (error.response?.data?.error || 'Xử lý trả sách thất bại.'))
   }
+}
+
+const handlePageChange = (page) => {
+  goToPage(page)
+}
+
+const handlePageSizeChange = (newSize) => {
+  changePageSize(newSize)
 }
 </script>
 <style scoped>
-@import '../assets/style/BorrowManagement.css';
+.borrow-management {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.page-header h2 {
+  color: #2c3e50;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.btn-add {
+  background-color: #42b983;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: background-color 0.3s;
+}
+
+.btn-add:hover {
+  background-color: #3aa876;
+}
 
 .filter-section {
   margin-bottom: 1.5rem;
-  display: flex;
-  justify-content: flex-end;
 }
+
 .search-input {
-  padding: 0.75rem 1rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
   width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 1rem;
   max-width: 400px;
 }
+
+.search-input:focus {
+  outline: none;
+  border-color: #42b983;
+  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+}
+
+.table-container {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.table-container h3 {
+  margin: 0 0 1rem 0;
+  color: #1f2937;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.borrow-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 2rem;
+}
+
+.borrow-table th,
+.borrow-table td {
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+  text-align: left;
+}
+
+.borrow-table th {
+  background-color: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+}
+
+.borrow-table tbody tr:nth-child(even) {
+  background-color: #f8fafc;
+}
+
+.borrow-table tbody tr:hover {
+  background-color: #f1f5f9;
+}
+
+.btn-return {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-return:hover {
+  background-color: #dc2626;
+}
+
+.empty-list {
+  text-align: center;
+  padding: 3rem;
+  color: #94a3b8;
+  font-size: 1.1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
 </style>

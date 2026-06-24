@@ -37,7 +37,7 @@ const handleLogout = () => {
   localStorage.removeItem('user')
   loggedInUser.value = null
   alert('Đã đăng xuất!')
-  router.push('/login') // Chuyển hướng về trang đăng nhập
+  router.push('/') // Chuyển hướng về trang chủ (dashboard)
 }
 
 const toggleSidebar = () => {
@@ -56,30 +56,35 @@ const toggleSidebar = () => {
       <nav class="sidebar-nav">
         <RouterLink to="/" class="nav-item" title="Dashboard">📊 <span v-if="!isSidebarCollapsed">Dashboard</span></RouterLink>
 
-        <RouterLink to="/" class="nav-item" title="Quản lý Sách">📖 <span v-if="!isSidebarCollapsed">Quản lý Sách</span></RouterLink>
+        <RouterLink to="/books" class="nav-item" title="Quản lý Sách">📖 <span v-if="!isSidebarCollapsed">Quản lý Sách</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrows" class="nav-item" title="Mượn / Trả Sách">📋 <span v-if="!isSidebarCollapsed">Mượn / Trả Sách</span></RouterLink>
-        <RouterLink v-if="loggedInUser.role === 'admin'" to="/borrows?history=true" class="nav-item" title="Lịch sử mượn">🕒 <span v-if="!isSidebarCollapsed">Lịch sử mượn</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrows/history" class="nav-item" title="Lịch sử mượn">🕒 <span v-if="!isSidebarCollapsed">Lịch sử mượn</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrow-requests" class="nav-item" title="Yêu cầu mượn">📝 <span v-if="!isSidebarCollapsed">Yêu cầu mượn</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/students" class="nav-item" title="Quản lý Sinh viên">👤 <span v-if="!isSidebarCollapsed">Quản lý Sinh viên</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'admin'" to="/emails" class="nav-item" title="Quản lý Email">📧 <span v-if="!isSidebarCollapsed">Quản lý Email</span></RouterLink>
+
+        <RouterLink to="/my-borrows" class="nav-item" title="Lịch sử mượn của tôi">📖 <span v-if="!isSidebarCollapsed">Lịch sử của tôi</span></RouterLink>
+        <RouterLink to="/profile" class="nav-item" title="Hồ sơ cá nhân">⚙️ <span v-if="!isSidebarCollapsed">Hồ sơ</span></RouterLink>
       </nav>
     </aside>
 
     <!-- Khối nội dung bên phải -->
     <div class="main-container">
-      <header v-if="loggedInUser" class="top-header">
+      <header class="top-header">
         <div class="header-content">
-          <button @click="toggleSidebar" class="btn-toggle">☰</button>
-          <span class="user-info">Xin chào, <strong>{{ loggedInUser.fullName || loggedInUser.username }}</strong></span>
-          <button @click="handleLogout" class="btn-logout">Đăng xuất</button>
+          <button v-if="loggedInUser" @click="toggleSidebar" class="btn-toggle">☰</button>
+          <span v-if="loggedInUser" class="user-info">Xin chào, <strong>{{ loggedInUser.fullName || loggedInUser.username }}</strong></span>
+          <button v-if="loggedInUser" @click="handleLogout" class="btn-logout">Đăng xuất</button>
+          <RouterLink v-else to="/login" class="btn-login">Đăng nhập</RouterLink>
         </div>
       </header>
 
       <main class="content-area">
         <RouterView />
       </main>
-
-      <footer v-if="loggedInUser" class="app-footer">
+      <footer class="app-footer">
         <p>&copy; 2024 Hệ thống Quản lý Thư viện - Developed with Vue 3</p>
-      </footer>
+      </footer>      
     </div>
   </div>
 </template>
@@ -90,7 +95,6 @@ const toggleSidebar = () => {
     margin: 0;
     padding: 0;
     width: 100%;
-    height: 100%;
     min-height: 100vh;
     box-sizing: border-box;
     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -101,7 +105,6 @@ const toggleSidebar = () => {
 .app-layout {
   display: flex;
   width: 100%;
-  height: 100%;
   min-height: 100vh; /* Quan trọng: Đảm bảo layout luôn cao ít nhất bằng màn hình */
   background-color: #f4f7f6;
   transition: all 0.3s ease;
@@ -218,25 +221,38 @@ const toggleSidebar = () => {
 }
 
 .app-footer {
+  margin-top: auto;
   padding: 1rem;
   text-align: center;
   background-color: #fff;
   border-top: 1px solid #eee;
   color: #7f8c8d;
   font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
-.btn-logout { 
-  background-color: #dc3545; 
-  color: white; 
-  border: none; 
-  padding: 0.5rem 1rem; 
-  border-radius: 4px; 
-  cursor: pointer; 
+.btn-logout {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
   flex-shrink: 0; /* Đảm bảo nút đăng xuất luôn giữ nguyên kích thước */
 }
 
 .btn-logout:hover { background-color: #c82333; }
+
+.btn-login {
+  background-color: #42b983;
+  color: white;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.btn-login:hover { background-color: #3aa876; }
 .error-text {
   color: #ff4d4d;
   font-size: 0.85rem;
