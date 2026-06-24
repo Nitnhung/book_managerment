@@ -40,12 +40,26 @@ button {
 }
 .btn-toggle { background: #3b82f6; color: white; }
 .btn-toggle:hover { background: #2563eb; }
+.btn-detail {
+  background-color: #42b983;
+  color: white;
+}
+.btn-detail:hover {
+  background-color: #3aa876;
+}
 .btn-edit {
   background-color: #f59e0b;
   color: white;
 }
 .btn-edit:hover {
   background-color: #d97706;
+}
+.btn-request {
+  background-color: #8b5cf6;
+  color: white;
+}
+.btn-request:hover {
+  background-color: #7c3aed;
 }
 .btn-delete { background: #ef4444; color: white; }
 .btn-delete:hover { background: #dc2626; }
