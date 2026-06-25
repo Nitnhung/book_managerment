@@ -13,23 +13,12 @@
 
     <!-- Danh sách sinh viên -->
     <section class="list-section">
-<<<<<<< Updated upstream
-      <h3 class="list-title">Danh sách sinh viên ({{ filteredStudents.length }})</h3>
-
-      <div v-if="filteredStudents.length === 0" class="empty-list">
-        Không tìm thấy sinh viên nào phù hợp.
-      </div>
-
-      <template v-else>
-        <table class="student-table">
-=======
       <div v-if="searchedStudents.length === 0" class="empty-list">
         Không tìm thấy sinh viên nào.
       </div>
 
       <div v-else>
         <table class="borrow-table">
->>>>>>> Stashed changes
           <thead>
             <tr>
               <th>MSV</th>
@@ -40,11 +29,7 @@
             </tr>
           </thead>
           <tbody>
-<<<<<<< Updated upstream
-            <tr v-for="student in paginatedStudents" :key="student.MSV">
-=======
             <tr v-for="student in paginatedItems" :key="student.MSV">
->>>>>>> Stashed changes
               <td>{{ student.MSV }}</td>
               <td>{{ student.fullName }}</td>
               <td>{{ student.class }}</td>
@@ -57,20 +42,15 @@
           </tbody>
         </table>
 
-<<<<<<< Updated upstream
-        <Pagination v-model:currentPage="currentPage" :total-pages="totalPages" />
-      </template>
-=======
         <!-- Phân trang -->
         <Pagination
           :current-page="currentPage"
-          :total-pages="Math.ceil(searchedStudents.length / pageSize)"
+          :total-pages="Math.ceil(searchedStudents.length / pageSize) || 1"
           :page-size="pageSize"
           @page-change="handlePageChange"
           @page-size-change="handlePageSizeChange"
         />
       </div>
->>>>>>> Stashed changes
     </section>
 
     <!-- Modal Thêm Sinh Viên -->
@@ -159,20 +139,12 @@
 </template>
 
 <script setup>
-<<<<<<< Updated upstream
-import { ref, computed, watch, onMounted } from 'vue';
-import { useValidation } from '../composables/useValidation.js'; // Thêm .js
-import api from '../api/axios.js'; // Thêm .js
-import { useSearch } from '../composables/useSearch.js'
-import Pagination from '../components/Pagination.vue'
-=======
 import { ref, onMounted, computed } from 'vue'
 import { useValidation } from '../composables/useValidation.js'
 import { usePagination } from '../composables/usePagination.js'
 import { useSearch } from '../composables/useSearch.js'
 import Pagination from '../components/Pagination.vue'
 import api from '../api/axios.js'
->>>>>>> Stashed changes
 
 const { validate } = useValidation()
 
@@ -212,24 +184,12 @@ const uniqueClasses = computed(() => {
   return [...new Set(students.value.map(s => s.class))].filter(Boolean).sort()
 })
 
-// Phân trang (client-side) đồng bộ với các trang khác
-const currentPage = ref(1)
-const pageSize = 8
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredStudents.value.length / pageSize)))
-const paginatedStudents = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredStudents.value.slice(start, start + pageSize)
-})
 
-// Khi tìm kiếm hoặc dữ liệu đổi, đưa về trang 1 nếu trang hiện tại vượt quá
-watch([filteredStudents], () => {
-  if (currentPage.value > totalPages.value) currentPage.value = 1
-})
 
 async function fetchStudents() {
   // Lấy toàn bộ sinh viên rồi phân trang phía client
   const res = await api.get('/students', { params: { limit: 1000 } })
-  students.value = res.data?.data || []
+  students.value = res.data || []
 }
 
 function openAddModal() {

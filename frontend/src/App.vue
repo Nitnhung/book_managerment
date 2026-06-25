@@ -54,28 +54,15 @@ const toggleSidebar = () => {
         <h2 v-else>📚</h2>
       </div>
       <nav class="sidebar-nav">
-        <template v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'">
-          <RouterLink to="/" class="nav-item" title="Dashboard">📊 <span v-if="!isSidebarCollapsed">Dashboard</span></RouterLink>
-
-<<<<<<< Updated upstream
-          <RouterLink to="/" class="nav-item" title="Quản lý Sách">📖 <span v-if="!isSidebarCollapsed">Quản lý Sách</span></RouterLink>
-          <RouterLink to="/borrows" class="nav-item" title="Mượn / Trả Sách">📋 <span v-if="!isSidebarCollapsed">Mượn / Trả Sách</span></RouterLink>
-          <RouterLink v-if="loggedInUser.role === 'admin'" to="/borrows?history=true" class="nav-item" title="Lịch sử mượn">🕒 <span v-if="!isSidebarCollapsed">Lịch sử mượn</span></RouterLink>
-          <RouterLink to="/students" class="nav-item" title="Quản lý Sinh viên">👤 <span v-if="!isSidebarCollapsed">Quản lý Sinh viên</span></RouterLink>
-        </template>
-
-        <RouterLink v-if="loggedInUser.role === 'student'" to="/my-borrows" class="nav-item" title="Lịch sử mượn sách">🕒 <span v-if="!isSidebarCollapsed">Lịch sử mượn sách</span></RouterLink>
-=======
-        <RouterLink to="/books" class="nav-item" title="Quản lý Sách">📖 <span v-if="!isSidebarCollapsed">Quản lý Sách</span></RouterLink>
+          <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/" class="nav-item" title="Dashboard">📊 <span v-if="!isSidebarCollapsed">Dashboard</span></RouterLink>        <RouterLink to="/books" class="nav-item" title="Quản lý Sách">📖 <span v-if="!isSidebarCollapsed">Quản lý Sách</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrows" class="nav-item" title="Mượn / Trả Sách">📋 <span v-if="!isSidebarCollapsed">Mượn / Trả Sách</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrows/history" class="nav-item" title="Lịch sử mượn">🕒 <span v-if="!isSidebarCollapsed">Lịch sử mượn</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrow-requests" class="nav-item" title="Yêu cầu mượn">📝 <span v-if="!isSidebarCollapsed">Yêu cầu mượn</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/students" class="nav-item" title="Quản lý Sinh viên">👤 <span v-if="!isSidebarCollapsed">Quản lý Sinh viên</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin'" to="/emails" class="nav-item" title="Quản lý Email">📧 <span v-if="!isSidebarCollapsed">Quản lý Email</span></RouterLink>
 
-        <RouterLink to="/my-borrows" class="nav-item" title="Lịch sử mượn của tôi">📖 <span v-if="!isSidebarCollapsed">Lịch sử của tôi</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'student'" to="/my-borrows" class="nav-item" title="Lịch sử mượn của tôi">📖 <span v-if="!isSidebarCollapsed">Lịch sử của tôi</span></RouterLink>
         <RouterLink to="/profile" class="nav-item" title="Hồ sơ cá nhân">⚙️ <span v-if="!isSidebarCollapsed">Hồ sơ</span></RouterLink>
->>>>>>> Stashed changes
       </nav>
     </aside>
 

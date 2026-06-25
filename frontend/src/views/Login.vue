@@ -50,16 +50,10 @@ async function handleLogin() {
 <template>
   <div class="login-container">
     <div class="login-card">
-<<<<<<< Updated upstream
-      <h2>🔐 Đăng nhập hệ thống</h2>
-      <p class="login-hint">Thủ thư dùng tài khoản được cấp. Sinh viên đăng nhập bằng Mã sinh viên (MSV).</p>
-=======
       <div class="card-header">
         <h2>👋 Chào mừng trở lại!</h2>
         <p class="subtitle">Đăng nhập để truy cập hệ thống thư viện</p>
       </div>
-      
->>>>>>> Stashed changes
       <form @submit.prevent="handleLogin">
         <div class="form-group">
           <label>Tài khoản</label>
@@ -251,15 +245,5 @@ async function handleLogin() {
   color: #6366f1;
   text-decoration: underline;
 }
-<<<<<<< Updated upstream
-.login-hint { color: #777; font-size: 0.85rem; margin: -0.5rem 0 1.2rem; text-align: center; }
-.form-group { margin-bottom: 1rem; }
-.form-group label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-.form-group input { width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-.btn-login { width: 100%; padding: 0.8rem; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; margin-top: 1rem; }
-.btn-login:hover { background-color: #45a049; }
-.error-text { color: #ff4d4d; font-size: 0.85rem; margin-top: 0.3rem; display: block; }
-.global-error { text-align: center; border: 1px solid #ff4d4d; padding: 0.5rem; border-radius: 4px; background: #fff5f5; }
-=======
->>>>>>> Stashed changes
+
 </style>

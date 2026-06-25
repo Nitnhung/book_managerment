@@ -55,13 +55,6 @@ const routes = [
     component: StudentManagement
   },
   {
-<<<<<<< Updated upstream
-    // Trang dành cho sinh viên: xem lịch sử mượn sách của chính mình
-    path: '/my-borrows',
-    name: 'StudentHistory',
-    component: StudentHistory,
-    meta: { role: 'student' }
-=======
     path: '/my-borrows',
     name: 'StudentBorrowHistory',
     component: StudentBorrowHistory
@@ -75,7 +68,6 @@ const routes = [
     path: '/emails',
     name: 'EmailManagement',
     component: EmailManagement
->>>>>>> Stashed changes
   }
 ]
 
@@ -109,13 +101,19 @@ router.beforeEach((to, from, next) => {
     role = null
   }
 
-  // Sinh viên chỉ được phép truy cập trang lịch sử mượn của mình
-  if (loggedIn && role === 'student' && to.path !== '/my-borrows') {
-    return next('/my-borrows')
+  // Danh sách trang sinh viên được phép truy cập
+  const studentAllowedPages = ['/', '/my-borrows', '/profile']
+  
+  // Danh sách trang chỉ admin/librarian được phép truy cập
+  const adminOnlyPages = ['/books', '/borrows', '/students', '/borrow-requests', '/borrows/history', '/emails']
+
+  // Nếu sinh viên cố truy cập trang admin -> chặn và đưa về trang chủ
+  if (loggedIn && role === 'student' && adminOnlyPages.includes(to.path)) {
+    return next('/')
   }
 
-  // Tài khoản thủ thư/admin không cần vào trang dành riêng cho sinh viên
-  if (loggedIn && role !== 'student' && to.meta?.role === 'student') {
+  // Nếu admin/librarian cố truy cập trang sinh viên -> chặn và đưa về trang chủ admin
+  if (loggedIn && (role === 'admin' || role === 'librarian') && to.path === '/my-borrows') {
     return next('/')
   }
 

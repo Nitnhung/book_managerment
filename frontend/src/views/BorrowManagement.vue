@@ -28,7 +28,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="record in filteredBorrowRecords" :key="record.IdRent">
+          <tr v-for="record in paginatedItems" :key="record.IdRent">
             <td>{{ record.IdRent }}</td>
             <td>{{ record.MSV }}</td>
             <td>{{ record.fullName }}</td>
@@ -42,6 +42,15 @@
           </tr>
         </tbody>
       </table>
+
+      <!-- Phân trang -->
+      <Pagination
+        :current-page="currentPage"
+        :total-pages="Math.ceil(filteredBorrowRecords.length / pageSize) || 1"
+        :page-size="pageSize"
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
+      />
     </div>
 
     <!-- BorrowModal Component -->
@@ -58,9 +67,12 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { useValidation } from '../composables/useValidation.js'; // Thêm .js
-import api from '../api/axios.js'; // Thêm .js
+import { useValidation } from '../composables/useValidation.js';
+import api from '../api/axios.js';
 import { useSearch } from '../composables/useSearch.js'
+import { usePagination } from '../composables/usePagination.js'
+import Pagination from '../components/Pagination.vue'
+import BorrowModal from '../components/BorrowModal.vue'
 
 const { validate } = useValidation(); // Sử dụng composable
 
@@ -82,11 +94,19 @@ const isBorrowModalOpen = ref(false)
 
 const { searchQuery, filteredData: filteredBorrowRecords } = useSearch(borrowRecords, ['MSV', 'fullName', 'nameBook'])
 
+const { currentPage, pageSize, paginatedItems, goToPage, changePageSize } = usePagination(filteredBorrowRecords, 10)
+
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('vi-VN')
+}
+
 // 1. Lấy danh sách sách và lọc chỉ lấy những cuốn có sẵn (isAvailable) để mượn
 async function fetchAvailableBooks() {
   try {
     const response = await api.get('/books', { params: { limit: 1000 } })
-    const data = response.data?.data || []
+    const data = response.data || []
     
     // Chuyển đổi và lọc sách còn sẵn trong kho
     availableBooks.value = data
@@ -108,7 +128,7 @@ async function fetchAvailableBooks() {
 async function fetchBorrowRecords() {
   try {
     const response = await api.get('/borrows', { params: { limit: 1000 } })
-    borrowRecords.value = response.data?.data || []
+    borrowRecords.value = response.data || []
   } catch (error) {
     console.error('Lỗi lấy danh sách thẻ mượn:', error)
   }

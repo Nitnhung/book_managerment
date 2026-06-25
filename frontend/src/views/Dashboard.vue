@@ -41,7 +41,7 @@
     <section class="recent-books-section">
       <div class="section-header">
         <h3>📖 Sách trong thư viện</h3>
-        <RouterLink to="/books" class="see-more-link">Xem thêm →</RouterLink>
+        <RouterLink v-if="isAdminOrLibrarian" to="/books" class="see-more-link">Xem thêm →</RouterLink>
       </div>
 
       <div v-if="recentBooks.length === 0" class="empty-books">

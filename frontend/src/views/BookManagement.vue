@@ -1,15 +1,7 @@
 <script setup>
-<<<<<<< Updated upstream
-import { ref, computed, watch, onMounted } from 'vue'
-import { useValidation } from '../composables/useValidation.js'; // Thêm .js
-import BookCard from '../components/BookCard.vue'
-import Pagination from '../components/Pagination.vue'
-import api from '../api/axios.js'; // Thêm .js
-=======
 import { ref, computed, onMounted } from 'vue'
 import { useValidation } from '../composables/useValidation.js'
 import { usePagination } from '../composables/usePagination.js'
->>>>>>> Stashed changes
 import { useSearch } from '../composables/useSearch.js'
 import BookCard from '../components/BookCard.vue'
 import Pagination from '../components/Pagination.vue'
@@ -102,32 +94,16 @@ const getBookValidationRules = (currentYear) => ({
 
 async function fetchBooks() {
   try {
-<<<<<<< Updated upstream
-    const response = await api.get('/books', { params: { limit: 1000 } })
-    const data = response.data?.data || []
-    
-    // Chuyển đổi dữ liệu thô từ DB thành các thuộc tính dễ hiểu cho Frontend
-    books.value = data.map(b => ({
-      id: b.IdBook, // Khớp với trường khóa chính trong DB của bạn
-      title: b.nameBook,
-=======
     const response = await api.get('/books/grouped')
     books.value = response.data.map(b => ({
       title: b.title,
->>>>>>> Stashed changes
       author: b.author,
       category: b.category,
       categoryId: b.categoryId,
       year: b.year,
-<<<<<<< Updated upstream
-      isAvailable: b.availableQuantity !== undefined
-        ? Number(b.availableQuantity) > 0
-        : (b.status === 1 || b.status === true || b.status === '1')
-=======
       totalCopies: b.totalCopies,
       availableCopies: b.availableCopies,
       isAvailable: b.availableCopies > 0
->>>>>>> Stashed changes
     }))
   } catch (error) {
     console.error('Lỗi khi lấy danh sách sách:', error)
@@ -253,29 +229,6 @@ async function deleteCopy(id) {
   }
 }
 
-<<<<<<< Updated upstream
-// 4. Logic lọc sách (Tìm kiếm + Thể loại) mà không cần tải lại trang
-// Computed sẽ tự động tính toán lại mỗi khi searchQuery hoặc selectedCategory thay đổi
-const filteredBooks = computed(() => {
-  return searchedBooks.value.filter(book => {
-    // Kiểm tra thể loại có khớp với lựa chọn không
-    const matchesCategory = selectedCategory.value === 'Tất cả' || book.category === selectedCategory.value
-    return matchesCategory
-  })
-})
-
-// Phân trang (client-side) đồng bộ với các trang khác
-const currentPage = ref(1)
-const pageSize = 6
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredBooks.value.length / pageSize)))
-const paginatedBooks = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredBooks.value.slice(start, start + pageSize)
-})
-watch(filteredBooks, () => {
-  if (currentPage.value > totalPages.value) currentPage.value = 1
-})
-=======
 async function requestBorrow(book) {
   const user = JSON.parse(localStorage.getItem('user'))
   if (!user) {
@@ -332,7 +285,6 @@ async function handleBorrowRequestSubmit(data) {
 
 const handlePageChange = (page) => goToPage(page)
 const handlePageSizeChange = (newSize) => changePageSize(newSize)
->>>>>>> Stashed changes
 </script>
 
 <template>
@@ -359,15 +311,6 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
         <h3 class="list-title">Danh mục đầu sách ({{ filteredBooks.length }} đầu sách)</h3>
       </div>
 
-<<<<<<< Updated upstream
-      <div class="book-grid" v-else>
-        <BookCard 
-          v-for="book in paginatedBooks" 
-          :key="book.id" 
-          :book="book"
-          @delete-book="deleteBook"
-          @edit-book="openEditModal"
-=======
       <div v-if="filteredBooks.length === 0" class="empty-list">
         Không tìm thấy đầu sách nào phù hợp.
       </div>
@@ -390,11 +333,8 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
           :page-size="pageSize"
           @page-change="handlePageChange"
           @page-size-change="handlePageSizeChange"
->>>>>>> Stashed changes
         />
       </div>
-
-      <Pagination v-model:currentPage="currentPage" :total-pages="totalPages" />
     </section>
 
     <!-- Modal Thêm Sách -->

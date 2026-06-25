@@ -4,10 +4,16 @@
 
     <div class="profile-card">
       <form @submit.prevent="handleUpdate" class="profile-form">
-        <div class="form-group">
+        <div class="form-group" v-if="isStudent">
           <label>Mã sinh viên (MSV)</label>
           <input v-model="profileData.MSV" type="text" disabled />
           <small>Không thể thay đổi MSV</small>
+        </div>
+
+        <div class="form-group" v-if="isAdmin">
+          <label>Tên đăng nhập</label>
+          <input v-model="profileData.username" type="text" disabled />
+          <small>Không thể thay đổi tên đăng nhập</small>
         </div>
 
         <div class="form-group">
@@ -22,7 +28,7 @@
           <span v-if="formErrors.class" class="error-text">{{ formErrors.class }}</span>
         </div>
 
-        <div class="form-group">
+        <div class="form-group" v-if="isStudent">
           <label>Địa chỉ Email</label>
           <input v-model="profileData.email" type="email" placeholder="student@fpt.edu.vn" required />
           <span v-if="formErrors.email" class="error-text">{{ formErrors.email }}</span>
@@ -76,12 +82,14 @@ const userRole = ref('')
 
 const profileData = ref({
   MSV: '',
+  username: '',
   fullName: '',
   class: '',
   email: ''
 })
 
 const isStudent = computed(() => userRole.value === 'student')
+const isAdmin = computed(() => userRole.value === 'admin' || userRole.value === 'librarian')
 
 const passwordData = ref({
   currentPassword: '',
@@ -89,23 +97,29 @@ const passwordData = ref({
   confirmPassword: ''
 })
 
-const profileRules = computed(() => ({
-  fullName: [
-    { type: 'required', message: 'Vui lòng nhập Họ và tên!' },
-    { type: 'maxLength', value: 255, message: 'Họ và tên không được vượt quá 255 ký tự.' }
-  ],
-  ...(isStudent.value ? {
-    class: [
+const profileRules = computed(() => {
+  const rules = {
+    fullName: [
+      { type: 'required', message: 'Vui lòng nhập Họ và tên!' },
+      { type: 'maxLength', value: 255, message: 'Họ và tên không được vượt quá 255 ký tự.' }
+    ]
+  }
+
+  // Chỉ validate class và email cho sinh viên
+  if (isStudent.value) {
+    rules.class = [
       { type: 'required', message: 'Vui lòng nhập Lớp!' },
       { type: 'maxLength', value: 50, message: 'Lớp không được vượt quá 50 ký tự.' }
     ]
-  } : {}),
-  email: [
-    { type: 'required', message: 'Vui lòng nhập Email!' },
-    { type: 'isEmail', message: 'Email không hợp lệ.' },
-    { type: 'maxLength', value: 100, message: 'Email không được vượt quá 100 ký tự.' }
-  ]
-}))
+    rules.email = [
+      { type: 'required', message: 'Vui lòng nhập Email!' },
+      { type: 'isEmail', message: 'Email không hợp lệ.' },
+      { type: 'maxLength', value: 100, message: 'Email không được vượt quá 100 ký tự.' }
+    ]
+  }
+
+  return rules
+})
 
 async function fetchProfile() {
   try {
@@ -118,45 +132,41 @@ async function fetchProfile() {
     // Get user role
     userRole.value = user.role || ''
 
-    // Backend giờ trả về username là MSV
-    const msv = user.username
-    if (!msv) {
-      alert('Không tìm thấy mã sinh viên trong thông tin đăng nhập!')
-      return
-    }
-
-    // Nếu user đã có đầy đủ thông tin từ login, sử dụng luôn
-    if (user.fullName && user.email) {
+    // Gọi API /api/profile để lấy thông tin người dùng hiện tại
+    const response = await api.get('/profile')
+    
+    if (isStudent.value) {
       profileData.value = {
-        MSV: msv,
-        fullName: user.fullName,
-        class: user.class || '',
-        email: user.email
+        MSV: response.data.MSV || response.data.username || '',
+        username: response.data.username || '',
+        fullName: response.data.fullName || '',
+        class: response.data.class || '',
+        email: response.data.email || ''
       }
-      return
-    }
-
-    // Nếu chưa có, gọi API để lấy thông tin
-    const response = await api.get(`/students/${msv}`)
-    profileData.value = {
-      MSV: response.data.MSV || msv,
-      fullName: response.data.fullName || user.fullName || '',
-      class: response.data.class || user.class || '',
-      email: response.data.email || user.email || ''
+    } else {
+      // Admin/Librarian
+      profileData.value = {
+        MSV: response.data.username || '',
+        username: response.data.username || '',
+        fullName: response.data.fullName || '',
+        class: '',
+        email: response.data.email || ''
+      }
     }
   } catch (error) {
     console.error('Lỗi lấy thông tin profile:', error)
     // Nếu API lỗi, thử dùng thông tin từ localStorage
     const user = JSON.parse(localStorage.getItem('user'))
-    if (user && user.username) {
+    if (user) {
       profileData.value = {
-        MSV: user.username,
+        MSV: user.username || user.MSV || '',
+        username: user.username || '',
         fullName: user.fullName || '',
         class: user.class || '',
         email: user.email || ''
       }
     } else {
-      alert('Không thể tải thông tin hồ sơ. Vui lòng thử lại!')
+      updateError.value = 'Không thể tải thông tin hồ sơ. Vui lòng đăng nhập lại!'
     }
   }
 }
@@ -185,30 +195,26 @@ async function handleUpdate() {
     }
   }
 
-  // Kiểm tra MSV có giá trị không
-  if (!profileData.value.MSV) {
-    updateError.value = 'Không tìm thấy mã sinh viên. Vui lòng tải lại trang!'
-    return
-  }
-
   isUpdating.value = true
   updateError.value = ''
   updateSuccess.value = ''
 
   try {
-    // Only send class field if user is a student
+    // Chuẩn bị dữ liệu cập nhật
     const updateData = {
       fullName: profileData.value.fullName,
-      email: profileData.value.email,
       currentPassword: passwordData.value.currentPassword,
       newPassword: passwordData.value.newPassword
     }
 
+    // Chỉ gửi email và class nếu là sinh viên
     if (isStudent.value) {
+      updateData.email = profileData.value.email
       updateData.class = profileData.value.class
     }
 
-    await api.put(`/students/${profileData.value.MSV}/profile`, updateData)
+    // Sử dụng API /api/profile cho cả admin và student
+    await api.put('/profile', updateData)
 
     updateSuccess.value = '✅ Cập nhật thông tin thành công!'
 
