@@ -4,7 +4,6 @@ const cors = require('cors');
 const mysql = require('mysql2'); // Đảm bảo bạn đã cài: npm install mysql2
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 5000; // Đảm bảo luôn ưu tiên 5000 nếu .env trống
@@ -113,6 +112,12 @@ app.post('/api/login', (req, res) => {
   const librarianSql = 'SELECT * FROM librarians WHERE username = ?';
   db.query(librarianSql, [username], (err, librarianResults) => {
     if (err) return res.status(500).json({ error: err.message });
+<<<<<<< Updated upstream
+
+    // Nếu không phải thủ thư/admin, thử đăng nhập với vai trò sinh viên (dùng MSV)
+    if (results.length === 0) return loginAsStudent(username, password, res);
+=======
+>>>>>>> Stashed changes
 
     // Nếu tìm thấy librarian
     if (librarianResults.length > 0) {
@@ -426,8 +431,30 @@ app.get('/api/students', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
 
+<<<<<<< Updated upstream
+  const countSql = `SELECT COUNT(*) as total FROM students ${whereClause}`;
+  db.query(countSql, queryParams, (err, countResults) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const totalItems = countResults[0].total;
+    const totalPages = Math.ceil(totalItems / limit);
+
+    const sql = `SELECT MSV, fullName, class, email FROM students ${whereClause} LIMIT ? OFFSET ?`;
+    const finalParams = [...queryParams, Number(limit), Number(offset)];
+
+    db.query(sql, finalParams, (err, results) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({
+        data: results,
+        totalItems,
+        totalPages,
+        currentPage: page
+      });
+    });
+=======
     console.log('✅ Trả về', results.length, 'sinh viên');
     res.json(results);
+>>>>>>> Stashed changes
   });
 });
 
@@ -531,6 +558,11 @@ app.delete('/api/students/:msv', verifyToken, authorize(['admin', 'librarian']),
 // 2.2 Lấy thông tin sinh viên theo MSV
 app.get('/api/students/:msv', (req, res) => {
   const msv = req.params.msv;
+<<<<<<< Updated upstream
+  const sql = 'SELECT MSV, fullName, class, email FROM students WHERE MSV = ?';
+  
+  db.query(sql, [msv], (err, results) => {
+=======
   const sql = `
     SELECT u.username AS MSV, u.full_name AS fullName, ud.class_name AS class, u.email
     FROM users u
@@ -539,6 +571,7 @@ app.get('/api/students/:msv', (req, res) => {
   `;
 
   db.query(sql, [msv, STUDENT_ROLE_ID], (err, results) => {
+>>>>>>> Stashed changes
     if (err) return res.status(500).json({ error: err.message });
     if (results.length > 0) return res.json(results[0]);
 
@@ -602,6 +635,30 @@ app.delete('/api/books/:id', verifyToken, authorize(['admin', 'librarian']), (re
 app.get('/api/borrows', (req, res) => {
   console.log('--- [DEBUG] GET /api/borrows ---');
 
+<<<<<<< Updated upstream
+  let whereClause = 'WHERE br.status = ?'; // Lọc theo status
+  const queryParams = [];
+  queryParams.push(req.query.status || 1); // Mặc định lấy các bản ghi đang mượn (status = 1)
+
+  if (search) {
+    whereClause += ' AND (br.MSV LIKE ? OR s.fullName LIKE ? OR b.nameBook LIKE ?)';
+    const searchPattern = `%${search}%`;
+    queryParams.push(searchPattern, searchPattern, searchPattern);
+  }
+
+    // Nếu là sinh viên, chỉ cho xem thẻ mượn của chính mình (lọc theo MSV trong token).
+  if (req.userRole === 'student') {
+    whereClause += ' AND br.MSV = ?';
+    queryParams.push(req.userMSV);
+  }
+
+  const countSql = `
+    SELECT COUNT(*) as total 
+    FROM borrow_records br
+    JOIN books b ON br.IdBook = b.IdBook
+    JOIN students s ON br.MSV = s.MSV
+    ${whereClause}
+=======
   const sql = `
     SELECT 
       bb.id AS IdRent,
@@ -619,6 +676,7 @@ app.get('/api/borrows', (req, res) => {
     LEFT JOIN user_details ud ON u.id = ud.user_id
     WHERE bb.status = 1
     ORDER BY bb.borrow_date DESC
+>>>>>>> Stashed changes
   `;
 
   db.query(sql, (err, results) => {
@@ -666,34 +724,57 @@ app.post('/api/borrows', verifyToken, authorize(['admin', 'librarian']), (req, r
   });
 });
 
+<<<<<<< Updated upstream
 // 5.1 API: Sinh viên xem lịch sử mượn sách của chính mình (cả đang mượn lẫn đã trả)
 app.get('/api/my-borrows', verifyToken, authorize(['student']), (req, res) => {
-  const userId = req.userId;
-  if (!userId) return res.status(400).json({ error: 'Không xác định được người dùng từ tài khoản.' });
+  const MSV = req.userMSV;
+  if (!MSV) return res.status(400).json({ error: 'Không xác định được mã sinh viên từ tài khoản.' });
 
   const sql = `
-    SELECT 
-      bb.id AS IdRent,
-      bb.book_id AS IdBook,
-      DATE_FORMAT(bb.borrow_date, '%Y-%m-%d') AS timeStart,
-      DATE_FORMAT(bb.due_date, '%Y-%m-%d') AS timeEnd,
-      DATE_FORMAT(bb.return_date, '%Y-%m-%d') AS returnActualDate,
-      bb.status,
-      b.title AS nameBook,
-      b.author
-    FROM borrow_books bb
-    JOIN books b ON bb.book_id = b.id
-    WHERE bb.user_id = ?
-    ORDER BY bb.status DESC, bb.borrow_date DESC
+    SELECT br.IdRent, br.IdBook, br.MSV, br.timeStart, br.timeEnd,
+           br.returnActualDate, br.status,
+           b.nameBook, b.author
+    FROM borrow_records br
+    JOIN books b ON br.IdBook = b.IdBook
+    WHERE br.MSV = ?
+    ORDER BY br.status DESC, br.timeStart DESC
   `;
 
-  db.query(sql, [userId], (err, results) => {
+  db.query(sql, [MSV], (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ data: results, totalItems: results.length });
   });
 });
 
+// 6. Lập thẻ mượn mới: Tạo record mượn và cập nhật status sách sang 0
+// Thêm verifyToken và sử dụng req.userId
+app.post('/api/borrows', verifyToken, authorize(['admin', 'librarian']), (req, res) => {
+  const { IdBook, MSV } = req.body;
+  const timeStart = new Date();
+
+  // Mặc định cho mượn 14 ngày (Hạn trả)
+  const timeEnd = new Date();
+  timeEnd.setDate(timeStart.getDate() + 14); 
+
+  // Lấy ID thủ thư từ token đã xác thực
+  const IdUser = req.userId; 
+
+  const sql = 'INSERT INTO borrow_records (IdBook, IdUser, MSV, timeStart, timeEnd, status) VALUES (?, ?, ?, ?, ?, 1)'; // Thêm status = 1
+  db.query(sql, [IdBook, IdUser, MSV, timeStart, timeEnd], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    // Cập nhật luôn trạng thái cuốn sách thành ĐÃ MƯỢN (status = 0)
+    db.query('UPDATE books SET status = 0 WHERE IdBook = ?', [IdBook]);
+
+    res.json({ message: 'Tạo thẻ mượn thành công!', IdRent: result.insertId });
+  });
+});
+
+// 5. API: Xử lý trả sách (Xóa thẻ mượn và mở lại trạng thái sách thành Có sẵn)
+// Thêm verifyToken để bảo vệ API trả sách
+=======
 // 5. API: Xử lý trả sách
+>>>>>>> Stashed changes
 app.patch('/api/borrows/:id/return', verifyToken, authorize(['admin', 'librarian']), (req, res) => {
   const idRent = req.params.id;
   const returnDate = new Date();
@@ -911,153 +992,6 @@ app.post('/api/students/register', (req, res) => {
   });
 });
 
-// 6.3x API: Lấy thông tin profile của người dùng hiện tại
-app.get('/api/profile', verifyToken, (req, res) => {
-  const userId = req.userId;
-  const userRole = req.userRole;
-
-  // Nếu là admin hoặc librarian
-  if (userRole === 'admin' || userRole === 'librarian') {
-    const sql = 'SELECT id, username, fullName, role FROM librarians WHERE id = ?';
-    db.query(sql, [userId], (err, results) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (results.length === 0) return res.status(404).json({ error: 'Không tìm thấy thông tin người dùng!' });
-
-      const librarian = results[0];
-      return res.json({
-        username: librarian.username,
-        fullName: librarian.fullName,
-        role: librarian.role,
-        email: null // Librarians không có email trong schema hiện tại
-      });
-    });
-  }
-  // Nếu là sinh viên
-  else if (userRole === 'student') {
-    const sql = `
-      SELECT u.username AS MSV, u.full_name AS fullName, ud.class_name AS class, u.email, u.role_id
-      FROM users u
-      LEFT JOIN user_details ud ON u.id = ud.user_id
-      WHERE u.id = ? AND u.role_id = ?
-    `;
-
-    db.query(sql, [userId, STUDENT_ROLE_ID], (err, results) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (results.length === 0) return res.status(404).json({ error: 'Không tìm thấy sinh viên!' });
-
-      const student = results[0];
-      return res.json({
-        MSV: student.MSV,
-        username: student.MSV,
-        fullName: student.fullName,
-        class: student.class,
-        email: student.email,
-        role: 'student'
-      });
-    });
-  } else {
-    return res.status(403).json({ error: 'Vai trò không hợp lệ!' });
-  }
-});
-
-// 6.3y API: Cập nhật profile của người dùng hiện tại
-app.put('/api/profile', verifyToken, (req, res) => {
-  const userId = req.userId;
-  const userRole = req.userRole;
-  const { fullName, email, currentPassword, newPassword, class: studentClass } = req.body;
-
-  // Hàm kiểm tra và đổi mật khẩu cho librarian
-  function updateLibrarianProfile(hashedPassword = null) {
-    let updateSql;
-    let params;
-
-    if (hashedPassword) {
-      updateSql = 'UPDATE librarians SET fullName = ?, password = ? WHERE id = ?';
-      params = [fullName, hashedPassword, userId];
-    } else {
-      updateSql = 'UPDATE librarians SET fullName = ? WHERE id = ?';
-      params = [fullName, userId];
-    }
-
-    db.query(updateSql, params, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Cập nhật thông tin thành công!' });
-    });
-  }
-
-  // Hàm kiểm tra và đổi mật khẩu cho student
-  function updateStudentProfile(hashedPassword = null) {
-    let updateSql;
-    let params;
-
-    if (hashedPassword) {
-      updateSql = 'UPDATE users SET full_name = ?, email = ?, password = ? WHERE id = ?';
-      params = [fullName, email, hashedPassword, userId];
-    } else {
-      updateSql = 'UPDATE users SET full_name = ?, email = ? WHERE id = ?';
-      params = [fullName, email, userId];
-    }
-
-    db.query(updateSql, params, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-
-      // Cập nhật class nếu có
-      const safeClass = studentClass !== undefined ? studentClass : null;
-      db.query(
-        'INSERT INTO user_details (user_id, class_name) VALUES (?, ?) ON DUPLICATE KEY UPDATE class_name = ?',
-        [userId, safeClass, safeClass],
-        (err2) => {
-          if (err2) return res.status(500).json({ error: err2.message });
-          res.json({ message: 'Cập nhật thông tin thành công!' });
-        }
-      );
-    });
-  }
-
-  // Xử lý cho admin/librarian
-  if (userRole === 'admin' || userRole === 'librarian') {
-    if (currentPassword && newPassword) {
-      // Kiểm tra mật khẩu hiện tại
-      db.query('SELECT password FROM librarians WHERE id = ?', [userId], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (results.length === 0) return res.status(404).json({ error: 'Không tìm thấy người dùng!' });
-
-        const passwordIsValid = bcrypt.compareSync(currentPassword, results[0].password);
-        if (!passwordIsValid) return res.status(401).json({ error: 'Mật khẩu hiện tại không đúng!' });
-
-        const hashedPassword = bcrypt.hashSync(newPassword, 8);
-        updateLibrarianProfile(hashedPassword);
-      });
-    } else if (currentPassword || newPassword) {
-      return res.status(400).json({ error: 'Vui lòng nhập cả mật khẩu hiện tại và mật khẩu mới!' });
-    } else {
-      updateLibrarianProfile();
-    }
-  }
-  // Xử lý cho student
-  else if (userRole === 'student') {
-    if (currentPassword && newPassword) {
-      // Kiểm tra mật khẩu hiện tại
-      db.query('SELECT password FROM users WHERE id = ?', [userId], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (results.length === 0) return res.status(404).json({ error: 'Không tìm thấy người dùng!' });
-
-        const passwordIsValid = bcrypt.compareSync(currentPassword, results[0].password);
-        if (!passwordIsValid) return res.status(401).json({ error: 'Mật khẩu hiện tại không đúng!' });
-
-        const hashedPassword = bcrypt.hashSync(newPassword, 8);
-        updateStudentProfile(hashedPassword);
-      });
-    } else if (currentPassword || newPassword) {
-      return res.status(400).json({ error: 'Vui lòng nhập cả mật khẩu hiện tại và mật khẩu mới!' });
-    } else {
-      updateStudentProfile();
-    }
-  } else {
-    return res.status(403).json({ error: 'Vai trò không hợp lệ!' });
-  }
-});
-
 // 6.3a API: Sinh viên tự cập nhật profile (không cần quyền admin)
 app.put('/api/students/:msv/profile', verifyToken, (req, res) => {
   const msv = req.params.msv;
@@ -1113,10 +1047,9 @@ app.put('/api/students/:msv/profile', verifyToken, (req, res) => {
     db.query(updateUserSql, [fullName, email, hashedNewPassword, userId], (err3) => {
       if (err3) return res.status(500).json({ error: err3.message });
 
-      const safeClass = studentClass !== undefined ? studentClass : null;
       db.query(
         'INSERT INTO user_details (user_id, class_name) VALUES (?, ?) ON DUPLICATE KEY UPDATE class_name = ?',
-        [userId, safeClass, safeClass],
+        [userId, studentClass, studentClass],
         (err4) => {
           if (err4) return res.status(500).json({ error: err4.message });
           res.json({ message: 'Cập nhật profile thành công!' });
@@ -1130,10 +1063,9 @@ app.put('/api/students/:msv/profile', verifyToken, (req, res) => {
     db.query(updateUserSql, [fullName, email, userId], (err3) => {
       if (err3) return res.status(500).json({ error: err3.message });
 
-      const safeClass = studentClass !== undefined ? studentClass : null;
       db.query(
         'INSERT INTO user_details (user_id, class_name) VALUES (?, ?) ON DUPLICATE KEY UPDATE class_name = ?',
-        [userId, safeClass, safeClass],
+        [userId, studentClass, studentClass],
         (err4) => {
           if (err4) return res.status(500).json({ error: err4.message });
           res.json({ message: 'Cập nhật profile thành công!' });

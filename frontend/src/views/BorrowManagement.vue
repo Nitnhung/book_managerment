@@ -13,55 +13,6 @@
 
     <!-- Danh sách thẻ mượn -->
     <div class="table-container">
-      <h3>Danh sách sinh viên đang mượn sách</h3>
-      
-      <div v-if="searchedRecords.length === 0" class="empty-list">
-        Không tìm thấy thẻ mượn nào.
-      </div>
-
-      <div v-else>
-        <table class="borrow-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Mã Sinh Viên</th>
-              <th>Tên Sinh Viên</th>
-              <th>Lớp</th>
-              <th>Tên Sách</th>
-              <th>Ngày bắt đầu</th>
-              <th>Ngày kết thúc</th>
-              <th>Hành Động</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="record in paginatedItems" :key="record.IdRent">
-              <td>{{ record.IdRent }}</td>
-              <td>{{ record.MSV }}</td>
-              <td>{{ record.fullName }}</td>
-              <td>{{ record.class }}</td>
-              <td>{{ record.nameBook }}</td>
-              <td>{{ formatDate(record.timeStart, 'Chưa xác định') }}</td>
-              <td>{{ formatDate(record.timeEnd, 'Chưa xác định') }}</td>
-              <td>
-                <button @click="returnBook(record.IdRent)" class="btn-return">Trả Sách</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <!-- Phân trang -->
-        <Pagination
-          :current-page="currentPage"
-          :total-pages="Math.ceil(searchedRecords.length / pageSize)"
-          :page-size="pageSize"
-          @page-change="handlePageChange"
-          @page-size-change="handlePageSizeChange"
-        />
-      </div>
-    </div>
-
-<<<<<<< Updated upstream
-    <div class="table-container">
       <h3>Danh Sách Sinh Viên Đang Mượn Sách</h3>
       <table class="borrow-table">
         <thead>
@@ -77,7 +28,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="record in paginatedBorrowRecords" :key="record.IdRent">
+          <tr v-for="record in filteredBorrowRecords" :key="record.IdRent">
             <td>{{ record.IdRent }}</td>
             <td>{{ record.MSV }}</td>
             <td>{{ record.fullName }}</td>
@@ -91,10 +42,8 @@
           </tr>
         </tbody>
       </table>
-
-      <Pagination v-model:currentPage="currentPage" :total-pages="totalPages" />
     </div>
-=======
+
     <!-- BorrowModal Component -->
     <BorrowModal
       :is-open="isBorrowModalOpen"
@@ -104,48 +53,34 @@
       @close="isBorrowModalOpen = false"
       @submit="handleBorrowSubmit"
     />
->>>>>>> Stashed changes
   </div>
 </template>
 
 <script setup>
-<<<<<<< Updated upstream
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useValidation } from '../composables/useValidation.js'; // Thêm .js
 import api from '../api/axios.js'; // Thêm .js
 import { useSearch } from '../composables/useSearch.js'
-import Pagination from '../components/Pagination.vue'
-=======
-import { ref, onMounted } from 'vue'
-import { usePagination } from '../composables/usePagination.js'
-import { useSearch } from '../composables/useSearch.js'
-import Pagination from '../components/Pagination.vue'
-import BorrowModal from '../components/BorrowModal.vue'
-import api from '../api/axios.js'
-import { formatDate } from '../utils/formatDate.js'
->>>>>>> Stashed changes
+
+const { validate } = useValidation(); // Sử dụng composable
+
+// Định nghĩa các quy tắc kiểm tra cho thẻ mượn
+const borrowValidationRules = {
+  MSV: [
+    { type: 'required', message: 'Vui lòng nhập Mã sinh viên!' },
+    { type: 'maxLength', value: 50, message: 'Mã sinh viên không được vượt quá 50 ký tự.' }
+  ],
+  IdBook: [
+    { type: 'required', message: 'Vui lòng chọn Sách!' }
+  ]
+};
 
 const borrowRecords = ref([])
 const availableBooks = ref([])
 const allStudents = ref([])
 const isBorrowModalOpen = ref(false)
 
-const { searchQuery, filteredData: searchedRecords } = useSearch(borrowRecords, ['MSV', 'fullName', 'nameBook'])
-
-// Sử dụng phân trang
-const { currentPage, pageSize, paginatedItems, goToPage, changePageSize } = usePagination(searchedRecords, 10)
-
-// Phân trang (client-side) đồng bộ với các trang khác
-const currentPage = ref(1)
-const pageSize = 8
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredBorrowRecords.value.length / pageSize)))
-const paginatedBorrowRecords = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredBorrowRecords.value.slice(start, start + pageSize)
-})
-watch(filteredBorrowRecords, () => {
-  if (currentPage.value > totalPages.value) currentPage.value = 1
-})
+const { searchQuery, filteredData: filteredBorrowRecords } = useSearch(borrowRecords, ['MSV', 'fullName', 'nameBook'])
 
 // 1. Lấy danh sách sách và lọc chỉ lấy những cuốn có sẵn (isAvailable) để mượn
 async function fetchAvailableBooks() {

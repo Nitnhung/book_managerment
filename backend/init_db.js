@@ -37,24 +37,6 @@ connection.connect((err) => {
 
     // Bước 4: Tạo các bảng cần thiết (khớp với database thực tế)
     const createTablesQuery = `
-<<<<<<< Updated upstream
-      CREATE TABLE IF NOT EXISTS students (
-          MSV VARCHAR(50) PRIMARY KEY,
-          fullName VARCHAR(255) NOT NULL,
-          class VARCHAR(50),
-          email VARCHAR(100),
-          password VARCHAR(255)
-      );
-
-      CREATE TABLE IF NOT EXISTS books (
-          IdBook INT AUTO_INCREMENT PRIMARY KEY,
-          nameBook VARCHAR(255) NOT NULL,
-          isbn VARCHAR(50),
-          author VARCHAR(255) NOT NULL,
-          year INT,
-          category INT,
-          status TINYINT(1) DEFAULT 1
-=======
       CREATE TABLE IF NOT EXISTS roles (
           id INT AUTO_INCREMENT PRIMARY KEY,
           role_name VARCHAR(20) NOT NULL
@@ -74,7 +56,6 @@ connection.connect((err) => {
           user_id INT PRIMARY KEY,
           class_name VARCHAR(50),
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
->>>>>>> Stashed changes
       );
 
       CREATE TABLE IF NOT EXISTS librarians (
@@ -82,9 +63,6 @@ connection.connect((err) => {
           username VARCHAR(50) UNIQUE NOT NULL,
           password VARCHAR(255) NOT NULL,
           fullName VARCHAR(255),
-<<<<<<< Updated upstream
-          role VARCHAR(20) NOT NULL DEFAULT 'librarian'
-=======
           role VARCHAR(50) DEFAULT 'librarian'
       );
 
@@ -140,7 +118,6 @@ connection.connect((err) => {
           FOREIGN KEY (book_id) REFERENCES books(id),
           FOREIGN KEY (user_id) REFERENCES users(id),
           FOREIGN KEY (approved_by) REFERENCES users(id)
->>>>>>> Stashed changes
       );
 
       CREATE TABLE IF NOT EXISTS borrow_records (
@@ -150,13 +127,8 @@ connection.connect((err) => {
           MSV VARCHAR(50) NOT NULL,
           timeStart DATETIME NOT NULL,
           timeEnd DATETIME NOT NULL,
-<<<<<<< Updated upstream
-          returnActualDate DATETIME NULL,
-          status TINYINT(1) NOT NULL DEFAULT 1
-=======
           status TINYINT(1) DEFAULT 1,
           returnActualDate DATETIME
->>>>>>> Stashed changes
       );
     `;
 
@@ -164,23 +136,6 @@ connection.connect((err) => {
         if (err) console.error('❌ Lỗi tạo bảng:', err.message);
       else {
         console.log('🎉 Các bảng đã sẵn sàng!');
-<<<<<<< Updated upstream
-        // Thêm một vài sinh viên mẫu
-        const adminPasswordHash = bcrypt.hashSync('123', 8);
-        // Mật khẩu mặc định cho sinh viên mẫu là '123'
-        const studentPasswordHash = bcrypt.hashSync('123', 8);
-
-        const seedStudents = `
-          INSERT IGNORE INTO students (MSV, fullName, class, email, password) VALUES 
-          ('BH02443', 'Nguyen Van A', 'IT1801', 'anv@fpt.edu.vn', '${studentPasswordHash}'),
-          ('BH02550', 'Tran Thi B', 'IT1802', 'btt@fpt.edu.vn', '${studentPasswordHash}');
-
-          -- Thêm một thủ thư mẫu để test login (Mật khẩu là 123)
-          -- Sử dụng REPLACE để đảm bảo mật khẩu được cập nhật nếu user đã tồn tại
-          REPLACE INTO librarians (username, password, fullName, role) VALUES
-          ('admin', '${adminPasswordHash}', 'Quản trị viên', 'admin');
-=======
-        
         // Seed dữ liệu mẫu
         const adminPasswordHash = bcrypt.hashSync('123456', 8);
         const librarianPasswordHash = bcrypt.hashSync('123456', 8);
@@ -227,12 +182,16 @@ connection.connect((err) => {
           ('BH02550', 'Tran Thi B', 'IT1802', 'btt@fpt.edu.vn', '${studentPasswordHash}');
 
           -- Insert sample books
-          INSERT IGNORE INTO books (title, author, published_year, category_id, isbn, status) VALUES 
-          ('Lập trình Java', 'James Gosling', 2020, 1, '978-1234567890', 1),
-          ('Cấu trúc dữ liệu và giải thuật', 'Thomas Cormen', 2019, 1, '978-1234567891', 1),
-          ('Truyện Kiều', 'Nguyễn Du', 1820, 2, '978-1234567892', 1),
-          ('Vật lý đại cương', 'Albert Einstein', 2018, 3, '978-1234567893', 1);
->>>>>>> Stashed changes
+          INSERT IGNORE INTO books (id, title, author, published_year, category_id, isbn, status) VALUES 
+          (1, 'Lập trình Java', 'James Gosling', 2020, 1, '978-1234567890', 1),
+          (2, 'Cấu trúc dữ liệu và giải thuật', 'Thomas Cormen', 2019, 1, '978-1234567891', 1),
+          (3, 'Truyện Kiều', 'Nguyễn Du', 1820, 2, '978-1234567892', 1),
+          (4, 'Vật lý đại cương', 'Albert Einstein', 2018, 3, '978-1234567893', 1);
+
+          -- Insert sample borrow records
+          INSERT IGNORE INTO borrow_books (book_id, user_id, librarian_id, borrow_date, due_date, status) VALUES
+          (1, 4, 2, CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 7 DAY), 1),
+          (2, 5, 2, CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 7 DAY), 1);
         `;
         connection.query(seedData, (err) => {
           if (err) console.error('❌ Lỗi seed dữ liệu:', err.message);
