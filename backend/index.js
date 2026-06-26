@@ -1,10 +1,11 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql2'); // Đảm bảo bạn đã cài: npm install mysql2
+const mysql = require('mysql2');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 5000; // Đảm bảo luôn ưu tiên 5000 nếu .env trống
@@ -308,6 +309,7 @@ app.get('/api/books/grouped', (req, res) => {
       category_id,
       COUNT(*) AS totalCopies,
       SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS availableCopies,
+      MIN(CASE WHEN status = 1 THEN id END) AS availableBookId,
       MIN(id) AS sampleId
     FROM books
     GROUP BY title, author, published_year, category_id
@@ -327,7 +329,7 @@ app.get('/api/books/grouped', (req, res) => {
       totalCopies: row.totalCopies,
       availableCopies: row.availableCopies,
       isAvailable: row.availableCopies > 0,
-      sampleId: row.sampleId
+      sampleId: row.availableBookId || row.sampleId // Ưu tiên ID của sách còn trống
     }));
 
     res.json(mapped);
@@ -1152,79 +1154,139 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// 6.4 API: Gửi email nhắc nhở
-app.post('/api/send-reminder-emails', verifyToken, authorize(['admin']), (req, res) => {
-  const sql = `
-    SELECT u.username AS MSV, u.full_name AS fullName, u.email, b.title AS nameBook, bb.due_date AS timeEnd
-    FROM borrow_books bb
-    JOIN users u ON bb.user_id = u.id
-    JOIN books b ON bb.book_id = b.id
-    WHERE bb.status = 1
-    AND DATEDIFF(bb.due_date, CURDATE()) = 1
-  `;
+// 6.4b API: Trạng thái cron job
+app.get('/api/cron-status', verifyToken, authorize(['admin']), (req, res) => {
+  res.json({
+    isRunning: true,
+    schedule: 'Mỗi ngày lúc 08:00 sáng',
+    timezone: 'Asia/Ho_Chi_Minh',
+    cronExpression: '0 8 * * *',
+    nextRun: getNextRun()
+  });
+});
 
-  db.query(sql, async (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
+function getNextRun() {
+  const now = new Date();
+  const next = new Date();
+  next.setHours(8, 0, 0, 0);
+  if (now >= next) next.setDate(next.getDate() + 1); // nếu đã qua 8:00 hôm nay → ngày mai
+  return next.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+}
 
-    if (results.length === 0) {
+// 6.4 API: Gửi email nhắc nhở (thủ công - tái sử dụng sendReminderEmailsJob)
+app.post('/api/send-reminder-emails', verifyToken, authorize(['admin']), async (req, res) => {
+  const { limit } = req.body;
+  try {
+    const result = await sendReminderEmailsJob(limit || null);
+    if (result.successCount === 0 && result.failedCount === 0) {
       return res.json({
         message: 'Không có sinh viên nào sắp đến hạn trả sách (trước 1 ngày).',
-        successCount: 0,
-        failedCount: 0,
-        failures: [],
-        successes: []
+        successCount: 0, failedCount: 0, successes: [], failures: []
       });
     }
-
-    const successes = [];
-    const failures = [];
-
-    // Gửi email cho từng người
-    for (const record of results) {
-      const mailOptions = {
-        from: '"Thư Viện FPT" <' + process.env.EMAIL_USER + '>',
-        to: record.email,
-        subject: '⏰ Nhắc Nhở Hạn Trả Sách - Thư Viện FPT',
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-            <h2 style="color: #42b983;">Xin chào ${record.fullName} (MSV: ${record.MSV}),</h2>
-            <p>Hệ thống thư viện xin thông báo:</p>
-            <p>Cuốn sách <strong>"${record.nameBook}"</strong> bạn đang mượn sắp đến hạn trả vào ngày <strong>${new Date(record.timeEnd).toLocaleDateString('vi-VN')}</strong>.</p>
-            <p>Vui lòng sắp xếp thời gian đến thư viện để trả sách đúng hạn tránh bị phạt nhé!</p>
-            <br/>
-            <p>Trân trọng,</p>
-            <p><strong>Ban Quản Trị Thư Viện FPT</strong></p>
-          </div>
-        `
-      };
-
-      try {
-        await transporter.sendMail(mailOptions);
-        successes.push({
-          studentEmail: record.email,
-          bookTitle: record.nameBook,
-          dueDate: new Date(record.timeEnd).toLocaleDateString('vi-VN'),
-          status: 'success'
-        });
-      } catch (mailErr) {
-        console.error('Lỗi gửi email cho', record.email, ':', mailErr.message);
-        failures.push({
-          studentEmail: record.email,
-          bookTitle: record.nameBook,
-          dueDate: new Date(record.timeEnd).toLocaleDateString('vi-VN'),
-          status: 'error',
-          error: mailErr.message
-        });
-      }
-    }
-
     res.json({
-      message: `Hoàn tất quá trình gửi mail. Thành công: ${successes.length}, Thất bại: ${failures.length}`,
-      successCount: successes.length,
-      failedCount: failures.length,
-      successes: successes,
-      failures: failures
+      message: `Hoàn tất. Thành công: ${result.successCount}, Thất bại: ${result.failedCount}`,
+      successCount: result.successCount,
+      failedCount:  result.failedCount,
+      successes: result.successes.map(s => ({
+        studentEmail: s.studentEmail,
+        bookTitle:    s.bookTitle,
+        dueDate:      '',
+        status:       'success'
+      })),
+      failures: result.failures.map(f => ({
+        studentEmail: f.studentEmail,
+        bookTitle:    '',
+        dueDate:      '',
+        status:       'error',
+        error:        f.error
+      }))
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6.5 API: Gửi email tùy chỉnh cho sinh viên cụ thể
+app.post('/api/send-custom-email', verifyToken, authorize(['admin', 'librarian']), async (req, res) => {
+  const { studentMSVs, subject, message: emailMessage } = req.body;
+  // studentMSVs có thể là string (1 MSV) hoặc array (nhiều MSV) hoặc 'all'
+
+  if (!subject || !emailMessage) {
+    return res.status(400).json({ error: 'Vui lòng điền đầy đủ Tiêu đề và Nội dung!' });
+  }
+
+  // Chuẩn hóa danh sách MSV
+  let msvList = [];
+  if (studentMSVs === 'all') {
+    // Lấy tất cả sinh viên có email
+    const allSql = `SELECT u.username AS MSV, u.full_name AS fullName, u.email FROM users u WHERE u.role_id = ? AND u.email IS NOT NULL AND u.email != ''`;
+    const [allRows] = await new Promise((resolve, reject) => {
+      db.query(allSql, [STUDENT_ROLE_ID], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+    msvList = allRows;
+  } else {
+    const msvsArray = Array.isArray(studentMSVs) ? studentMSVs : [studentMSVs];
+    if (msvsArray.length === 0) {
+      return res.status(400).json({ error: 'Vui lòng chọn ít nhất 1 sinh viên!' });
+    }
+    // Lấy thông tin từng MSV
+    const placeholders = msvsArray.map(() => '?').join(',');
+    const sql = `SELECT u.username AS MSV, u.full_name AS fullName, u.email FROM users u WHERE u.username IN (${placeholders}) AND u.role_id = ?`;
+    const [rows] = await new Promise((resolve, reject) => {
+      db.query(sql, [...msvsArray, STUDENT_ROLE_ID], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+    msvList = rows;
+  }
+
+  if (msvList.length === 0) {
+    return res.status(404).json({ error: 'Không tìm thấy sinh viên nào có email hợp lệ!' });
+  }
+
+  const successes = [];
+  const failures  = [];
+
+  for (const student of msvList) {
+    if (!student.email) {
+      failures.push({ studentEmail: '(không có email)', studentName: student.fullName, MSV: student.MSV, error: 'Chưa có email' });
+      continue;
+    }
+    const mailOptions = {
+      from: '"Thư Viện FPT" <' + process.env.EMAIL_USER + '>',
+      to: student.email,
+      subject: subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #42b983;">Xin chào ${student.fullName} (MSV: ${student.MSV}),</h2>
+          <div style="margin: 20px 0; line-height: 1.6;">
+            ${emailMessage.replace(/\n/g, '<br/>')}
+          </div>
+          <br/>
+          <p>Trân trọng,</p>
+          <p><strong>Ban Quản Trị Thư Viện FPT</strong></p>
+        </div>
+      `
+    };
+    try {
+      await transporter.sendMail(mailOptions);
+      successes.push({ studentEmail: student.email, studentName: student.fullName, MSV: student.MSV, status: 'success' });
+    } catch (mailErr) {
+      failures.push({ studentEmail: student.email, studentName: student.fullName, MSV: student.MSV, error: mailErr.message, status: 'error' });
+    }
+  }
+
+  res.json({
+    message: `Gửi email hoàn tất. Thành công: ${successes.length}, Thất bại: ${failures.length}`,
+    successCount: successes.length,
+    failedCount: failures.length,
+    successes,
+    failures
   });
 });
 
@@ -1261,6 +1323,98 @@ app.use((req, res) => {
     error: `Không tìm thấy đường dẫn ${req.method} ${req.originalUrl}. Vui lòng kiểm tra lại!`
   });
 });
+
+// ============================================================
+// CRON JOB: Tự động gửi email nhắc nhở hàng ngày lúc 8:00 sáng
+// ============================================================
+
+/**
+ * Hàm gửi email nhắc nhở - dùng chung cho cả cron và API thủ công
+ * @param {number|null} limit - Giới hạn số người nhận, null = tất cả
+ * @returns {Promise<{successCount, failedCount, successes, failures}>}
+ */
+async function sendReminderEmailsJob(limit = null) {
+  const sql = `
+    SELECT u.username AS MSV, u.full_name AS fullName, u.email,
+           b.title AS nameBook, bb.due_date AS timeEnd
+    FROM borrow_books bb
+    JOIN users u ON bb.user_id = u.id
+    JOIN books b ON bb.book_id = b.id
+    WHERE bb.status = 1
+    AND DATEDIFF(bb.due_date, CURDATE()) = 1
+    ${limit ? `LIMIT ${parseInt(limit)}` : ''}
+  `;
+
+  return new Promise((resolve) => {
+    db.query(sql, async (err, results) => {
+      if (err) {
+        console.error('❌ [Cron] Lỗi query DB:', err.message);
+        return resolve({ successCount: 0, failedCount: 0, successes: [], failures: [] });
+      }
+
+      if (results.length === 0) {
+        console.log('ℹ️  [Cron] Không có sinh viên nào sắp đến hạn trả sách ngày mai.');
+        return resolve({ successCount: 0, failedCount: 0, successes: [], failures: [] });
+      }
+
+      console.log(`📬 [Cron] Bắt đầu gửi email cho ${results.length} sinh viên...`);
+
+      const successes = [];
+      const failures  = [];
+
+      for (const record of results) {
+        if (!record.email) {
+          failures.push({ studentEmail: '(không có email)', MSV: record.MSV });
+          continue;
+        }
+
+        const mailOptions = {
+          from: `"Thư Viện FPT" <${process.env.EMAIL_USER}>`,
+          to: record.email,
+          subject: '⏰ Nhắc Nhở Hạn Trả Sách - Thư Viện FPT',
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+              <h2 style="color: #42b983;">Xin chào ${record.fullName} (MSV: ${record.MSV}),</h2>
+              <p>Hệ thống thư viện xin thông báo:</p>
+              <p>Cuốn sách <strong>"${record.nameBook}"</strong> bạn đang mượn
+                 sắp đến hạn trả vào ngày
+                 <strong>${new Date(record.timeEnd).toLocaleDateString('vi-VN')}</strong>.</p>
+              <p>Vui lòng sắp xếp thời gian đến thư viện để trả sách đúng hạn!</p>
+              <br/>
+              <p>Trân trọng,</p>
+              <p><strong>Ban Quản Trị Thư Viện FPT</strong></p>
+            </div>
+          `
+        };
+
+        try {
+          await transporter.sendMail(mailOptions);
+          successes.push({ studentEmail: record.email, bookTitle: record.nameBook });
+          console.log(`  ✅ Đã gửi → ${record.email}`);
+        } catch (mailErr) {
+          failures.push({ studentEmail: record.email, error: mailErr.message });
+          console.error(`  ❌ Thất bại → ${record.email}:`, mailErr.message);
+        }
+      }
+
+      console.log(`📊 [Cron] Hoàn tất: ✅ ${successes.length} thành công, ❌ ${failures.length} thất bại`);
+      resolve({ successCount: successes.length, failedCount: failures.length, successes, failures });
+    });
+  });
+}
+
+// Đăng ký cron job: chạy lúc 08:00 sáng mỗi ngày
+// Cú pháp: '0 8 * * *' = phút 0, giờ 8, mọi ngày/tháng/tuần
+cron.schedule('0 8 * * *', async () => {
+  const now = new Date().toLocaleString('vi-VN');
+  console.log(`\n⏰ [Cron] Bắt đầu job nhắc nhở lúc ${now}`);
+  await sendReminderEmailsJob();
+  console.log('⏰ [Cron] Job hoàn tất.\n');
+}, {
+  timezone: 'Asia/Ho_Chi_Minh'   // đúng múi giờ Việt Nam
+});
+
+console.log('✅ Cron job đã được đăng ký: gửi email nhắc nhở lúc 08:00 sáng mỗi ngày (Asia/Ho_Chi_Minh)');
 
 app.listen(PORT, () => {
   console.log(`🚀 Server Backend đang chạy mượt mà tại: http://localhost:${PORT}`);
