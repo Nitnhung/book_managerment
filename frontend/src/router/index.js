@@ -12,6 +12,7 @@ import UpdateProfile from '../views/UpdateProfile.vue'
 import BorrowRequests from '../views/BorrowRequests.vue'
 import StudentBorrowHistory from '../views/StudentBorrowHistory.vue'
 import EmailManagement from '../views/EmailManagement.vue'
+import ExportReport from '../views/ExportReport.vue'
 
 const routes = [
   {
@@ -68,6 +69,11 @@ const routes = [
     path: '/emails',
     name: 'EmailManagement',
     component: EmailManagement
+  },
+  {
+    path: '/export',
+    name: 'ExportReport',
+    component: ExportReport
   }
 ]
 
@@ -78,7 +84,7 @@ const router = createRouter({
 
 // Navigation Guard: "Người gác cổng" kiểm tra quyền truy cập
 router.beforeEach((to, from, next) => {
-  const publicPages = ['/login', '/register', '/'] // Các trang không cần đăng nhập
+  const publicPages = ['/login', '/register', '/', '/books'] // Các trang không cần đăng nhập
   const authRequired = !publicPages.includes(to.path)
   const loggedIn = localStorage.getItem('token') // Kiểm tra token trong bộ nhớ trình duyệt
 
@@ -102,10 +108,10 @@ router.beforeEach((to, from, next) => {
   }
 
   // Danh sách trang sinh viên được phép truy cập
-  const studentAllowedPages = ['/', '/my-borrows', '/profile']
+  const studentAllowedPages = ['/', '/books', '/my-borrows', '/profile']
   
   // Danh sách trang chỉ admin/librarian được phép truy cập
-  const adminOnlyPages = ['/books', '/borrows', '/students', '/borrow-requests', '/borrows/history', '/emails']
+  const adminOnlyPages = ['/borrows', '/students', '/borrow-requests', '/borrows/history', '/emails', '/export']
 
   // Nếu sinh viên cố truy cập trang admin -> chặn và đưa về trang chủ
   if (loggedIn && role === 'student' && adminOnlyPages.includes(to.path)) {

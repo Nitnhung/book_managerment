@@ -290,7 +290,9 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
 <template>
   <div class="container">
     <div class="page-header">
-      <h2>📚 Quản Lý Sách</h2>
+      <!-- Tiêu đề thay đổi theo vai trò -->
+      <h2 v-if="canManageBooks">📚 Quản Lý Sách</h2>
+      <h2 v-else>📚 Danh Sách Sách</h2>
       <button v-if="canManageBooks" @click="openAddModal" class="btn-add">➕ Thêm Sách Mới</button>
     </div>
 
@@ -449,7 +451,7 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
             <tr>
               <th>ID Sách</th>
               <th>Trạng thái</th>
-              <th>Hành động</th>
+              <th v-if="canManageBooks">Hành động</th>
             </tr>
           </thead>
           <tbody>
@@ -460,7 +462,7 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
                   {{ copy.status === 1 ? 'Còn sách' : 'Đã mượn' }}
                 </span>
               </td>
-              <td>
+              <td v-if="canManageBooks">
                 <button
                   @click="deleteCopy(copy.IdBook)"
                   class="btn-delete-copy"

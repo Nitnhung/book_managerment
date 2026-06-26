@@ -60,6 +60,7 @@ const toggleSidebar = () => {
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/borrow-requests" class="nav-item" title="Yêu cầu mượn">📝 <span v-if="!isSidebarCollapsed">Yêu cầu mượn</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/students" class="nav-item" title="Quản lý Sinh viên">👤 <span v-if="!isSidebarCollapsed">Quản lý Sinh viên</span></RouterLink>
         <RouterLink v-if="loggedInUser.role === 'admin'" to="/emails" class="nav-item" title="Quản lý Email">📧 <span v-if="!isSidebarCollapsed">Quản lý Email</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/export" class="nav-item" title="Xuất báo cáo">📊 <span v-if="!isSidebarCollapsed">Xuất báo cáo</span></RouterLink>
 
         <RouterLink v-if="loggedInUser.role === 'student'" to="/my-borrows" class="nav-item" title="Lịch sử mượn của tôi">📖 <span v-if="!isSidebarCollapsed">Lịch sử của tôi</span></RouterLink>
         <RouterLink to="/profile" class="nav-item" title="Hồ sơ cá nhân">⚙️ <span v-if="!isSidebarCollapsed">Hồ sơ</span></RouterLink>

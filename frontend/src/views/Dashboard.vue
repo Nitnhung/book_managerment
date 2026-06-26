@@ -1,47 +1,78 @@
 <template>
   <div class="dashboard-container">
+
+    <!-- ===== ADMIN / LIBRARIAN VIEW ===== -->
     <template v-if="isAdminOrLibrarian">
       <h2 class="dashboard-title">📊 Tổng quan hệ thống</h2>
 
       <div class="stats-grid">
-      <div class="stat-card blue">
-        <div class="stat-icon">📚</div>
-        <div class="stat-info">
-          <h3>Tổng số sách</h3>
-          <p class="stat-number">{{ stats.totalBooks }}</p>
+        <div class="stat-card blue">
+          <div class="stat-icon">📚</div>
+          <div class="stat-info">
+            <h3>Tổng số sách</h3>
+            <p class="stat-number">{{ stats.totalBooks }}</p>
+          </div>
         </div>
-      </div>
 
-      <div class="stat-card green">
-        <div class="stat-icon">✅</div>
-        <div class="stat-info">
-          <h3>Sách có sẵn</h3>
-          <p class="stat-number">{{ stats.availableBooks }}</p>
+        <div class="stat-card green">
+          <div class="stat-icon">✅</div>
+          <div class="stat-info">
+            <h3>Sách có sẵn</h3>
+            <p class="stat-number">{{ stats.availableBooks }}</p>
+          </div>
         </div>
-      </div>
 
-      <div class="stat-card orange">
-        <div class="stat-icon">📋</div>
-        <div class="stat-info">
-          <h3>Đang mượn</h3>
-          <p class="stat-number">{{ stats.activeBorrows }}</p>
+        <div class="stat-card orange">
+          <div class="stat-icon">📋</div>
+          <div class="stat-info">
+            <h3>Đang mượn</h3>
+            <p class="stat-number">{{ stats.activeBorrows }}</p>
+          </div>
         </div>
-      </div>
 
-      <div class="stat-card purple">
-        <div class="stat-icon">👤</div>
-        <div class="stat-info">
-          <h3>Sinh viên</h3>
-          <p class="stat-number">{{ stats.totalStudents }}</p>
+        <div class="stat-card purple">
+          <div class="stat-icon">👤</div>
+          <div class="stat-info">
+            <h3>Sinh viên</h3>
+            <p class="stat-number">{{ stats.totalStudents }}</p>
+          </div>
         </div>
       </div>
-    </div>
     </template>
 
+    <!-- ===== STUDENT VIEW HEADER ===== -->
+    <template v-if="isStudent">
+      <div class="student-header">
+        <div>
+          <h2 class="dashboard-title">👋 Xin chào, {{ loggedInUser?.fullName || loggedInUser?.username }}!</h2>
+          <p class="student-subtitle">Khám phá sách tại thư viện FPT.</p>
+        </div>
+        <div class="header-actions">
+          <RouterLink to="/books" class="btn-browse-books">📚 Xem danh sách sách</RouterLink>
+          <RouterLink to="/my-borrows" class="btn-my-borrows">📜 Lịch sử mượn sách</RouterLink>
+        </div>
+      </div>
+    </template>
+
+    <!-- ===== GUEST VIEW HEADER ===== -->
+    <template v-if="!isLoggedIn">
+      <div class="guest-header">
+        <div>
+          <h2 class="dashboard-title">📚 Chào mừng đến Thư Viện FPT</h2>
+          <p class="guest-subtitle">Khám phá kho sách phong phú của chúng tôi. Đăng nhập để mượn sách.</p>
+        </div>
+        <div class="header-actions">
+          <RouterLink to="/login" class="btn-login">🔐 Đăng nhập</RouterLink>
+          <RouterLink to="/books" class="btn-browse-books">📚 Xem danh sách sách</RouterLink>
+        </div>
+      </div>
+    </template>
+
+    <!-- ===== DANH SÁCH SÁCH (hiển thị cho tất cả) ===== -->
     <section class="recent-books-section">
       <div class="section-header">
         <h3>📖 Sách trong thư viện</h3>
-        <RouterLink v-if="isAdminOrLibrarian" to="/books" class="see-more-link">Xem thêm →</RouterLink>
+        <RouterLink to="/books" class="see-more-link">Xem tất cả →</RouterLink>
       </div>
 
       <div v-if="recentBooks.length === 0" class="empty-books">
@@ -53,17 +84,18 @@
           <div class="book-icon">📕</div>
           <div class="book-details">
             <h4>{{ book.title }}</h4>
-            <p class="book-author">{{ book.author }}</p>
+            <p class="book-author">✍️ {{ book.author }}</p>
             <div class="book-meta">
               <span class="badge">{{ book.category }}</span>
               <span :class="['status', book.isAvailable ? 'available' : 'borrowed']">
-                {{ book.isAvailable ? 'Còn sách' : 'Đã mượn' }}
+                {{ book.isAvailable ? `Còn ${book.availableCopies} cuốn` : 'Hết sách' }}
               </span>
             </div>
           </div>
         </div>
       </div>
     </section>
+
   </div>
 </template>
 
@@ -74,8 +106,16 @@ import api from '../api/axios.js'
 
 const loggedInUser = ref(null)
 
+const isLoggedIn = computed(() => {
+  return !!localStorage.getItem('token')
+})
+
 const isAdminOrLibrarian = computed(() => {
-  return loggedInUser.value && (loggedInUser.value.role === 'admin' || loggedInUser.value.role === 'librarian')
+  return loggedInUser.value?.role === 'admin' || loggedInUser.value?.role === 'librarian'
+})
+
+const isStudent = computed(() => {
+  return loggedInUser.value?.role === 'student'
 })
 
 const stats = ref({
@@ -99,10 +139,11 @@ async function fetchStats() {
 async function fetchRecentBooks() {
   try {
     const response = await api.get('/books/grouped')
-    const data = response.data.slice(0, 10)
+    const data = response.data.slice(0, 12)
 
     recentBooks.value = data.map(b => ({
       id: `${b.title}-${b.author}-${b.year}`,
+      sampleId: b.sampleId,
       title: b.title,
       author: b.author,
       category: b.category,
@@ -134,21 +175,93 @@ onMounted(() => {
 
 <style scoped>
 .dashboard-container {
-  padding: 1rem;
+  padding: 1.5rem;
   max-width: 1400px;
   margin: 0 auto;
 }
 
 .dashboard-title {
-  margin-bottom: 2rem;
+  margin: 0 0 1rem;
   color: #2c3e50;
 }
 
+.student-header,
+.guest-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  border-radius: 12px;
+  color: white;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.student-header {
+  background: linear-gradient(135deg, #42b983 0%, #2d9467 100%);
+}
+
+.guest-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.student-header .dashboard-title,
+.guest-header .dashboard-title {
+  color: white;
+  margin-bottom: 0.25rem;
+}
+
+.student-subtitle,
+.guest-subtitle {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 0.95rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-login,
+.btn-browse-books,
+.btn-my-borrows {
+  padding: 0.6rem 1.2rem;
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.btn-login,
+.btn-browse-books {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-my-borrows {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-login:hover,
+.btn-browse-books:hover,
+.btn-my-borrows:hover {
+  background: rgba(255, 255, 255, 0.35);
+  border-color: white;
+}
+
+/* Stats grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.5rem;
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
 }
 
 .stat-card {
@@ -162,19 +275,20 @@ onMounted(() => {
 }
 
 .stat-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-4px);
 }
 
 .stat-icon {
   font-size: 2.5rem;
-  margin-right: 1.5rem;
+  margin-right: 1.25rem;
 }
 
 .stat-info h3 {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: #7f8c8d;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .stat-info .stat-number {
@@ -184,11 +298,12 @@ onMounted(() => {
   color: #2c3e50;
 }
 
-.blue { border-left: 5px solid #3498db; }
+.blue  { border-left: 5px solid #3498db; }
 .green { border-left: 5px solid #2ecc71; }
-.orange { border-left: 5px solid #f39c12; }
-.purple { border-left: 5px solid #9b59b6; }
+.orange{ border-left: 5px solid #f39c12; }
+.purple{ border-left: 5px solid #9b59b6; }
 
+/* Books section */
 .recent-books-section {
   background: white;
   border-radius: 12px;
@@ -200,20 +315,20 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .section-header h3 {
   margin: 0;
   color: #2c3e50;
-  font-size: 1.25rem;
+  font-size: 1.2rem;
 }
 
 .see-more-link {
   color: #42b983;
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   transition: color 0.2s;
 }
 
@@ -222,9 +337,31 @@ onMounted(() => {
   text-decoration: underline;
 }
 
+/* Alert messages */
+.request-alert {
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.request-alert.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.request-alert.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* Books grid */
 .books-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
 }
 
@@ -246,26 +383,35 @@ onMounted(() => {
 .book-icon {
   font-size: 2rem;
   flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.book-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
 }
 
 .book-details h4 {
-  margin: 0 0 0.25rem;
+  margin: 0;
   color: #2c3e50;
-  font-size: 1rem;
+  font-size: 0.95rem;
   line-height: 1.4;
 }
 
 .book-author {
-  margin: 0 0 0.5rem;
+  margin: 0;
   color: #7f8c8d;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
 .book-meta {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
   align-items: center;
+  margin-top: 0.2rem;
 }
 
 .badge {
@@ -273,11 +419,12 @@ onMounted(() => {
   color: #2980b9;
   padding: 0.15rem 0.5rem;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 500;
 }
 
 .status {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   padding: 0.15rem 0.5rem;
   border-radius: 4px;

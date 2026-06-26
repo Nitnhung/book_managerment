@@ -63,3 +63,23 @@ button {
 }
 .btn-delete { background: #ef4444; color: white; }
 .btn-delete:hover { background: #dc2626; }
+
+.badge-unavailable {
+  display: inline-block;
+  padding: 5px 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.badge-login-hint {
+  display: inline-block;
+  padding: 5px 10px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}

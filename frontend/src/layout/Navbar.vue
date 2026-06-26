@@ -14,13 +14,15 @@
           <li><RouterLink to="/borrow-requests" active-class="active">📝 Yêu cầu mượn</RouterLink></li>
           <li><RouterLink to="/borrows/history" active-class="active">📜 Lịch sử mượn</RouterLink></li>
           <li v-if="isAdmin"><RouterLink to="/emails" active-class="active">📧 Quản lý Email</RouterLink></li>
+          <li v-if="isAdmin || isLibrarian"><RouterLink to="/export" active-class="active">📊 Xuất báo cáo</RouterLink></li>
         </template>
 
         <!-- Student Links -->
         <template v-if="isStudent">
-          <li><RouterLink to="/" active-class="active">📚 Danh sách sách</RouterLink></li>
+          <li><RouterLink to="/" active-class="active">🏠 Trang chủ</RouterLink></li>
+          <li><RouterLink to="/books" active-class="active">📚 Danh sách sách</RouterLink></li>
           <li><RouterLink to="/my-borrows" active-class="active">📜 Lịch sử mượn</RouterLink></li>
-          <li><RouterLink to="/profile" active-class="active">👤 Hồ sơ của tôi</RouterLink></li>
+          <li><RouterLink to="/profile" active-class="active">👤 Hồ sơ</RouterLink></li>
         </template>
 
         <!-- Logout -->
@@ -53,7 +55,7 @@ const isStudent = computed(() => userRole.value === 'student')
 function handleLogout() {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
-  router.push('/login')
+  router.push('/')
 }
 </script>
 
