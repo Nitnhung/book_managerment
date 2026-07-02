@@ -154,9 +154,15 @@
 
           <div class="form-group">
             <label class="field-label">💬 Nội dung *</label>
-            <textarea v-model="customEmail.message" rows="9"
-              placeholder="Nhập nội dung email...&#10;Hệ thống sẽ tự thêm lời chào và ký tên.">
-            </textarea>
+            <div class="quill-wrap">
+              <QuillEditor
+                v-model:content="customEmail.html"
+                content-type="html"
+                :toolbar="quillToolbar"
+                theme="snow"
+                placeholder="Nhập nội dung email... Hệ thống sẽ tự thêm lời chào và ký tên."
+              />
+            </div>
           </div>
 
           <div class="recipient-summary">
@@ -170,7 +176,7 @@
           </div>
 
           <button @click="sendCustomEmail" class="btn-send"
-            :disabled="sendingCustom || !customEmail.subject || !customEmail.message || (sendMode === 'select' && selectedStudents.length === 0)">
+            :disabled="sendingCustom || !customEmail.subject || !customEmail.html || customEmail.html === '<p><br></p>' || (sendMode === 'select' && selectedStudents.length === 0)">
             {{ sendingCustom ? '⏳ Đang gửi...' : `📧 Gửi cho ${sendMode === 'all' ? 'tất cả' : selectedStudents.length + ' người'}` }}
           </button>
         </div>
@@ -236,6 +242,8 @@ import { ref, onMounted, watch } from 'vue'
 import { useSearch } from '../composables/useSearch.js'
 import { usePagination } from '../composables/usePagination.js'
 import Pagination from '../components/Pagination.vue'
+import { QuillEditor } from '@vueup/vue-quill'
+import '@vueup/vue-quill/dist/vue-quill.snow.css'
 import api from '../api/axios.js'
 
 // ---- State chung ----
@@ -260,7 +268,18 @@ const senderEmail = 'nhungthihongnguyen06@gmail.com'
 const sendMode         = ref('all')   // 'all' | 'select'
 const allStudents      = ref([])
 const selectedStudents = ref([])      // danh sách sinh viên đã tích chọn
-const customEmail      = ref({ subject: '', message: '' })
+const customEmail = ref({ subject: '', html: '' })
+
+// Cấu hình toolbar Quill: đầy đủ font/size/màu/bold/italic/link/list/...
+const quillToolbar = [
+  [{ font: [] }, { size: ['small', false, 'large', 'huge'] }],
+  ['bold', 'italic', 'underline', 'strike'],
+  [{ color: [] }, { background: [] }],
+  [{ align: [] }],
+  [{ list: 'ordered' }, { list: 'bullet' }],
+  ['link'],
+  ['clean']
+]
 
 // Tái sử dụng useSearch: tìm theo MSV, email, fullName
 const { searchQuery, filteredData: filteredStudents } = useSearch(allStudents, ['MSV', 'email', 'fullName'])
@@ -348,11 +367,11 @@ async function sendReminderEmails() {
 
 // ---- Gửi email tùy chỉnh (1 lần, nhiều người) ----
 async function sendCustomEmail() {
-  if (!customEmail.value.subject || !customEmail.value.message) return
+  if (!customEmail.value.subject || !customEmail.value.html) return
 
   const payload = {
     subject: customEmail.value.subject,
-    message: customEmail.value.message,
+    message: customEmail.value.html,   // gửi HTML lên backend
     studentMSVs: sendMode.value === 'all'
       ? 'all'
       : selectedStudents.value.map(s => s.MSV)
@@ -369,7 +388,7 @@ async function sendCustomEmail() {
       ...(res.data.failures  || []).map(f => ({ studentEmail: f.studentEmail, subject: customEmail.value.subject, type: 'custom', status: 'error',   sentAt: new Date().toLocaleString('vi-VN') })),
     ])
     // Reset form và chuyển sang tab lịch sử
-    customEmail.value = { subject: '', message: '' }
+    customEmail.value = { subject: '', html: '' }
     selectedStudents.value = []
     activeTab.value = 'history'
   } catch (err) {
@@ -513,6 +532,29 @@ async function sendCustomEmail() {
 .form-group input:focus, .form-group textarea:focus {
   outline: none; border-color: #42b983; box-shadow: 0 0 0 3px rgba(66,185,131,0.1);
 }
+
+/* Quill Editor */
+.quill-wrap {
+  border: 1px solid #dcdfe6; border-radius: 8px;
+  overflow: hidden; transition: border-color 0.2s;
+}
+.quill-wrap:focus-within { border-color: #42b983; box-shadow: 0 0 0 3px rgba(66,185,131,0.1); }
+
+/* Ghi đè style Quill để phù hợp với design */
+.quill-wrap :deep(.ql-toolbar) {
+  border: none; border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc; border-radius: 0;
+}
+.quill-wrap :deep(.ql-container) {
+  border: none; font-size: 0.9rem; min-height: 160px;
+}
+.quill-wrap :deep(.ql-editor) { min-height: 160px; }
+.quill-wrap :deep(.ql-editor.ql-blank::before) {
+  color: #94a3b8; font-style: normal;
+}
+
+/* HTML source preview */
+
 .recipient-summary {
   padding: 0.6rem 0.85rem; background: #f8fafc;
   border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.88rem; color: #555;

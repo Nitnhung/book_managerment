@@ -123,47 +123,43 @@ const profileRules = computed(() => {
 
 async function fetchProfile() {
   try {
-    const user = JSON.parse(localStorage.getItem('user'))
+    const user = JSON.parse(localStorage.getItem('user') || 'null')
     if (!user) {
       alert('Vui lòng đăng nhập để cập nhật hồ sơ!')
       return
     }
 
-    // Get user role
     userRole.value = user.role || ''
 
-    // Gọi API /api/profile để lấy thông tin người dùng hiện tại
     const response = await api.get('/profile')
-    
+
     if (isStudent.value) {
       profileData.value = {
-        MSV: response.data.MSV || response.data.username || '',
+        MSV:      response.data.MSV || response.data.username || '',
         username: response.data.username || '',
         fullName: response.data.fullName || '',
-        class: response.data.class || '',
-        email: response.data.email || ''
+        class:    response.data.class || '',
+        email:    response.data.email || ''
       }
     } else {
-      // Admin/Librarian
       profileData.value = {
-        MSV: response.data.username || '',
+        MSV:      response.data.username || '',
         username: response.data.username || '',
         fullName: response.data.fullName || '',
-        class: '',
-        email: response.data.email || ''
+        class:    '',
+        email:    response.data.email || ''
       }
     }
   } catch (error) {
     console.error('Lỗi lấy thông tin profile:', error)
-    // Nếu API lỗi, thử dùng thông tin từ localStorage
-    const user = JSON.parse(localStorage.getItem('user'))
+    const user = JSON.parse(localStorage.getItem('user') || 'null')
     if (user) {
       profileData.value = {
-        MSV: user.username || user.MSV || '',
+        MSV:      user.username || user.MSV || '',
         username: user.username || '',
         fullName: user.fullName || '',
-        class: user.class || '',
-        email: user.email || ''
+        class:    user.class || '',
+        email:    user.email || ''
       }
     } else {
       updateError.value = 'Không thể tải thông tin hồ sơ. Vui lòng đăng nhập lại!'
@@ -218,14 +214,14 @@ async function handleUpdate() {
 
     updateSuccess.value = '✅ Cập nhật thông tin thành công!'
 
-    // Update localStorage user data
-    const user = JSON.parse(localStorage.getItem('user'))
-    user.fullName = profileData.value.fullName
-    user.email = profileData.value.email
-    if (isStudent.value) {
-      user.class = profileData.value.class
+    // Cập nhật localStorage
+    const user = JSON.parse(localStorage.getItem('user') || 'null')
+    if (user) {
+      user.fullName = profileData.value.fullName
+      user.email    = profileData.value.email
+      if (isStudent.value) user.class = profileData.value.class
+      localStorage.setItem('user', JSON.stringify(user))
     }
-    localStorage.setItem('user', JSON.stringify(user))
 
     // Reset password fields
     passwordData.value = {

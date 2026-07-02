@@ -9,6 +9,7 @@ import BorrowModal from '../components/BorrowModal.vue'
 import api from '../api/axios.js'
 
 const books = ref([])
+const categories = ref([])
 const selectedCategory = ref('Tất cả')
 const isAddModalOpen = ref(false)
 const isEditModalOpen = ref(false)
@@ -22,9 +23,9 @@ const userRole = ref('')
 const selectedBookForRequest = ref(null)
 
 onMounted(() => {
-  const userData = localStorage.getItem('user')
-  if (userData) {
-    const user = JSON.parse(userData)
+  const raw = localStorage.getItem('user')
+  if (raw) {
+    const user = JSON.parse(raw)
     userRole.value = user?.role || ''
   }
 })
@@ -35,8 +36,8 @@ const isStudent = computed(() => userRole.value === 'student')
 const canManageBooks = computed(() => isAdmin.value || isLibrarian.value)
 
 const currentUser = computed(() => {
-  const userData = localStorage.getItem('user')
-  return userData ? JSON.parse(userData) : null
+  const raw = localStorage.getItem('user')
+  return raw ? JSON.parse(raw) : null
 })
 
 const newBook = ref({
@@ -110,7 +111,19 @@ async function fetchBooks() {
   }
 }
 
-onMounted(fetchBooks)
+async function fetchCategories() {
+  try {
+    const response = await api.get('/categories')
+    categories.value = response.data
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách thể loại:', error)
+  }
+}
+
+onMounted(() => {
+  fetchBooks()
+  fetchCategories()
+})
 
 function openAddModal() {
   isAddModalOpen.value = true
@@ -230,7 +243,8 @@ async function deleteCopy(id) {
 }
 
 async function requestBorrow(book) {
-  const user = JSON.parse(localStorage.getItem('user'))
+  const raw = localStorage.getItem('user')
+  const user = raw ? JSON.parse(raw) : null
   if (!user) {
     alert('Vui lòng đăng nhập để yêu cầu mượn sách!')
     return
@@ -301,9 +315,7 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
         <input v-model="searchQuery" type="text" placeholder="🔍 Tìm kiếm theo tên hoặc tác giả..." class="search-input" />
         <select v-model="selectedCategory" class="filter-select">
           <option value="Tất cả">🎨 Tất cả thể loại</option>
-          <option value="Công nghệ thông tin">Công nghệ thông tin</option>
-          <option value="Văn học">Văn học</option>
-          <option value="Khoa học">Khoa học</option>
+          <option v-for="cat in categories" :key="cat.id" :value="cat.category_name">{{ cat.category_name }}</option>
         </select>
       </div>
     </section>
@@ -361,12 +373,11 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
 
           <div class="form-group">
             <label>Thể loại *</label>
-            <input list="categoryList" v-model="newBook.category" placeholder="Chọn hoặc nhập thể loại mới..." required />
+            <input list="categoryList" v-model="newBook.category" placeholder="Chọn từ danh sách hoặc nhập thể loại mới..." required />
             <datalist id="categoryList">
-              <option value="Công nghệ thông tin"></option>
-              <option value="Văn học"></option>
-              <option value="Khoa học"></option>
+              <option v-for="cat in categories" :key="cat.id" :value="cat.category_name"></option>
             </datalist>
+            <small class="hint-text">Bạn có thể nhập thể loại mới, hệ thống sẽ tự động tạo</small>
           </div>
 
           <div class="form-group">
@@ -413,6 +424,9 @@ const handlePageSizeChange = (newSize) => changePageSize(newSize)
           <div class="form-group">
             <label>Thể loại *</label>
             <input list="categoryList" v-model="editingBook.category" placeholder="Chọn hoặc nhập thể loại mới..." required />
+            <datalist id="categoryList">
+              <option v-for="cat in categories" :key="cat.id" :value="cat.category_name"></option>
+            </datalist>
           </div>
 
           <div class="form-group">

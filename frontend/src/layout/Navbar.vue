@@ -41,10 +41,11 @@ const user = ref(null)
 const userRole = ref('')
 
 onMounted(() => {
-  const userData = localStorage.getItem('user')
-  if (userData) {
-    user.value = JSON.parse(userData)
-    userRole.value = user.value?.role || ''
+  const raw = localStorage.getItem('user')
+  if (raw) {
+    const userData = JSON.parse(raw)
+    user.value = userData
+    userRole.value = userData?.role || ''
   }
 })
 

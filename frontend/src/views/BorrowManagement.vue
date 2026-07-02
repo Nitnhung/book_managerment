@@ -67,25 +67,11 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { useValidation } from '../composables/useValidation.js';
 import api from '../api/axios.js';
 import { useSearch } from '../composables/useSearch.js'
 import { usePagination } from '../composables/usePagination.js'
 import Pagination from '../components/Pagination.vue'
 import BorrowModal from '../components/BorrowModal.vue'
-
-const { validate } = useValidation(); // Sử dụng composable
-
-// Định nghĩa các quy tắc kiểm tra cho thẻ mượn
-const borrowValidationRules = {
-  MSV: [
-    { type: 'required', message: 'Vui lòng nhập Mã sinh viên!' },
-    { type: 'maxLength', value: 50, message: 'Mã sinh viên không được vượt quá 50 ký tự.' }
-  ],
-  IdBook: [
-    { type: 'required', message: 'Vui lòng chọn Sách!' }
-  ]
-};
 
 const borrowRecords = ref([])
 const availableBooks = ref([])

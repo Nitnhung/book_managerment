@@ -3,7 +3,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import BookManagement from '../views/BookManagement.vue'
 import BorrowManagement from '../views/BorrowManagement.vue'
 import StudentManagement from '../views/StudentManagement.vue'
-import StudentHistory from '../views/StudentHistory.vue'
 import Login from '../views/Login.vue'
 import Dashboard from '../views/Dashboard.vue'
 import BorrowHistory from '../views/BorrowHistory.vue'
@@ -13,68 +12,22 @@ import BorrowRequests from '../views/BorrowRequests.vue'
 import StudentBorrowHistory from '../views/StudentBorrowHistory.vue'
 import EmailManagement from '../views/EmailManagement.vue'
 import ExportReport from '../views/ExportReport.vue'
+import MyBorrowRequests from '../views/MyBorrowRequests.vue'
 
 const routes = [
-  {
-    path: '/login',
-    name: 'Login',
-    component: Login
-  },
-  {
-    path: '/register',
-    name: 'StudentRegister',
-    component: StudentRegister
-  },
-  {
-    path: '/',
-    name: 'Dashboard',
-    component: Dashboard
-  },
-  {
-    path: '/books',
-    name: 'Books',
-    component: BookManagement
-  },
-  {
-    path: '/borrows',
-    name: 'Borrows',
-    component: BorrowManagement
-  },
-  {
-    path: '/borrows/history',
-    name: 'BorrowHistory',
-    component: BorrowHistory
-  },
-  {
-    path: '/borrow-requests',
-    name: 'BorrowRequests',
-    component: BorrowRequests
-  },
-  {
-    path: '/students',
-    name: 'StudentManagement',
-    component: StudentManagement
-  },
-  {
-    path: '/my-borrows',
-    name: 'StudentBorrowHistory',
-    component: StudentBorrowHistory
-  },
-  {
-    path: '/profile',
-    name: 'UpdateProfile',
-    component: UpdateProfile
-  },
-  {
-    path: '/emails',
-    name: 'EmailManagement',
-    component: EmailManagement
-  },
-  {
-    path: '/export',
-    name: 'ExportReport',
-    component: ExportReport
-  }
+  { path: '/login',            name: 'Login',              component: Login },
+  { path: '/register',         name: 'StudentRegister',    component: StudentRegister },
+  { path: '/',                 name: 'Dashboard',          component: Dashboard },
+  { path: '/books',            name: 'Books',              component: BookManagement },
+  { path: '/borrows',          name: 'Borrows',            component: BorrowManagement },
+  { path: '/borrows/history',  name: 'BorrowHistory',      component: BorrowHistory },
+  { path: '/borrow-requests',  name: 'BorrowRequests',     component: BorrowRequests },
+  { path: '/students',         name: 'StudentManagement',  component: StudentManagement },
+  { path: '/my-borrows',       name: 'StudentBorrowHistory', component: StudentBorrowHistory },
+  { path: '/my-borrow-requests', name: 'MyBorrowRequests', component: MyBorrowRequests },
+  { path: '/profile',          name: 'UpdateProfile',      component: UpdateProfile },
+  { path: '/emails',           name: 'EmailManagement',    component: EmailManagement },
+  { path: '/export',           name: 'ExportReport',       component: ExportReport },
 ]
 
 const router = createRouter({
@@ -82,18 +35,18 @@ const router = createRouter({
   routes
 })
 
-// Navigation Guard: "Người gác cổng" kiểm tra quyền truy cập
+// Navigation Guard
 router.beforeEach((to, from, next) => {
-  const publicPages = ['/login', '/register', '/', '/books'] // Các trang không cần đăng nhập
+  const publicPages  = ['/login', '/register', '/', '/books']
   const authRequired = !publicPages.includes(to.path)
-  const loggedIn = localStorage.getItem('token') // Kiểm tra token trong bộ nhớ trình duyệt
+  const loggedIn     = !!localStorage.getItem('token')
 
-  // 1. Nếu trang yêu cầu đăng nhập mà chưa có token -> Đẩy về trang Login
+  // 1. Chưa đăng nhập mà vào trang cần auth → về Login
   if (authRequired && !loggedIn) {
     return next('/login')
   }
 
-  // 2. Nếu đã đăng nhập rồi mà cố tình quay lại trang Login hoặc Register -> Đẩy về trang chủ
+  // 2. Đã đăng nhập mà vào Login/Register → về trang chủ
   if ((to.path === '/login' || to.path === '/register') && loggedIn) {
     return next('/')
   }
@@ -103,27 +56,27 @@ router.beforeEach((to, from, next) => {
   try {
     const user = JSON.parse(localStorage.getItem('user') || 'null')
     role = user?.role || null
-  } catch (e) {
+  } catch {
     role = null
   }
 
-  // Danh sách trang sinh viên được phép truy cập
-  const studentAllowedPages = ['/', '/books', '/my-borrows', '/profile']
-  
-  // Danh sách trang chỉ admin/librarian được phép truy cập
-  const adminOnlyPages = ['/borrows', '/students', '/borrow-requests', '/borrows/history', '/emails', '/export']
+  // Trang chỉ admin/librarian được vào
+  const adminOnlyPages = [
+    '/borrows', '/students', '/borrow-requests',
+    '/borrows/history', '/emails', '/export'
+  ]
 
-  // Nếu sinh viên cố truy cập trang admin -> chặn và đưa về trang chủ
+  // Student vào trang admin → về trang chủ
   if (loggedIn && role === 'student' && adminOnlyPages.includes(to.path)) {
     return next('/')
   }
 
-  // Nếu admin/librarian cố truy cập trang sinh viên -> chặn và đưa về trang chủ admin
+  // Admin/librarian vào trang student → về trang chủ
   if (loggedIn && (role === 'admin' || role === 'librarian') && to.path === '/my-borrows') {
     return next('/')
   }
 
-  next() // Cho phép đi tiếp
+  next()
 })
 
 export default router

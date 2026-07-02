@@ -99,7 +99,9 @@ const returnedCount = computed(() => records.value.filter(r => isReturned(r)).le
 function loadStudent() {
   try {
     const raw = localStorage.getItem('user')
-    if (raw) student.value = JSON.parse(raw)
+    if (raw) {
+      student.value = JSON.parse(raw)
+    }
   } catch (e) {
     student.value = null
   }

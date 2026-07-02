@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="container student-borrow-history">
     <h2>📚 Lịch Sử Mượn Sách Của Tôi</h2>
 
@@ -114,7 +114,8 @@ const { currentPage, pageSize, paginatedItems, goToPage, changePageSize } = useP
 
 async function fetchBorrowHistory() {
   try {
-    const user = JSON.parse(localStorage.getItem('user'))
+    const raw = localStorage.getItem('user')
+    const user = raw ? JSON.parse(raw) : null
     if (!user || !user.username) {
       alert('Vui lòng đăng nhập để xem lịch sử mượn sách!')
       return

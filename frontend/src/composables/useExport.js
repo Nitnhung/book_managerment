@@ -1,45 +1,31 @@
-import * as XLSX from 'xlsx'
+import api from '../api/axios.js'
 
 /**
- * Composable tái sử dụng để xuất dữ liệu ra file Excel.
- * @returns { exportToExcel }
+ * Composable xuất Excel — gọi backend (ExcelJS) để có file đẹp với style đầy đủ.
  */
 export function useExport() {
   /**
-   * Xuất mảng dữ liệu ra file .xlsx
-   * @param {Array}  rows       - Mảng object dữ liệu cần xuất
-   * @param {Array}  columns    - Cấu hình cột: [{ key, label, width? }]
-   * @param {string} sheetName  - Tên sheet trong file Excel
-   * @param {string} fileName   - Tên file xuất (không cần đuôi .xlsx)
+   * @param {string} type       - Loại báo cáo: 'books' | 'students' | 'borrows_active' | 'borrows_history'
+   * @param {string} fileName   - Tên file tải về (không cần đuôi .xlsx)
+   * @param {Object} params     - Query params filter (status, from, to)
    */
-  function exportToExcel({ rows, columns, sheetName = 'Sheet1', fileName = 'export' }) {
-    // 1. Tạo header row từ columns config
-    const header = columns.map(c => c.label)
+  async function exportToExcel({ type, fileName, params = {} }) {
+    // Gọi API backend — nhận về binary stream
+    const response = await api.get(`/export/${type}`, {
+      params,
+      responseType: 'blob',   // ← quan trọng: nhận binary data
+    })
 
-    // 2. Map từng row data theo thứ tự columns
-    const data = rows.map(row =>
-      columns.map(c => {
-        const val = row[c.key]
-        return val !== null && val !== undefined ? val : ''
-      })
-    )
+    // Tạo URL tạm từ blob và trigger download
+    const url  = URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 
-    // 3. Tạo worksheet từ [header, ...data]
-    const ws = XLSX.utils.aoa_to_sheet([header, ...data])
+    link.href     = url
+    link.download = `${fileName}_${date}.xlsx`
+    link.click()
 
-    // 4. Đặt độ rộng cột (nếu có config)
-    ws['!cols'] = columns.map(c => ({ wch: c.width || 20 }))
-
-    // 5. Tạo workbook và thêm sheet
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, sheetName)
-
-    // 6. Tải file về máy
-    XLSX.writeFile(wb, `${fileName}_${_today()}.xlsx`)
-  }
-
-  function _today() {
-    return new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    URL.revokeObjectURL(url)
   }
 
   return { exportToExcel }

@@ -15,9 +15,9 @@ const isLoggedIn = ref(false)
 
 onMounted(() => {
   isLoggedIn.value = !!localStorage.getItem('token')
-  const userData = localStorage.getItem('user')
-  if (userData) {
-    const user = JSON.parse(userData)
+  const raw = localStorage.getItem('user')
+  if (raw) {
+    const user = JSON.parse(raw)
     userRole.value = user?.role || ''
   }
 })

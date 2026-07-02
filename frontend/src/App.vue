@@ -4,27 +4,24 @@ import { ref, watch } from 'vue'
 
 const router = useRouter()
 const loggedInUser = ref(null)
-const isSidebarCollapsed = ref(false) // Trạng thái thu gọn sidebar
+const isSidebarCollapsed = ref(false)
 
-// Hàm kiểm tra trạng thái đăng nhập và lấy thông tin người dùng
 const checkLoginStatus = () => {
-  const user = localStorage.getItem('user')
+  const userStr = localStorage.getItem('user')
   try {
-    if (user) {
-      loggedInUser.value = JSON.parse(user)
+    if (userStr) {
+      loggedInUser.value = JSON.parse(userStr)
     } else {
       loggedInUser.value = null
     }
   } catch (e) {
-    console.error("Lỗi phân tích JSON từ localStorage 'user':", e);
-    loggedInUser.value = null; // Đảm bảo không có lỗi nếu JSON bị hỏng
+    console.error("Lỗi phân tích JSON từ localStorage 'user':", e)
+    loggedInUser.value = null
   }
 }
 
-// Kiểm tra trạng thái đăng nhập khi component được tạo
 checkLoginStatus()
 
-// Theo dõi thay đổi route để cập nhật trạng thái đăng nhập (ví dụ: sau khi login/logout)
 watch(
   () => router.currentRoute.value,
   () => {
@@ -37,7 +34,7 @@ const handleLogout = () => {
   localStorage.removeItem('user')
   loggedInUser.value = null
   alert('Đã đăng xuất!')
-  router.push('/') // Chuyển hướng về trang chủ (dashboard)
+  router.push('/login')
 }
 
 const toggleSidebar = () => {
@@ -63,6 +60,7 @@ const toggleSidebar = () => {
         <RouterLink v-if="loggedInUser.role === 'admin' || loggedInUser.role === 'librarian'" to="/export" class="nav-item" title="Xuất báo cáo">📊 <span v-if="!isSidebarCollapsed">Xuất báo cáo</span></RouterLink>
 
         <RouterLink v-if="loggedInUser.role === 'student'" to="/my-borrows" class="nav-item" title="Lịch sử mượn của tôi">📖 <span v-if="!isSidebarCollapsed">Lịch sử của tôi</span></RouterLink>
+        <RouterLink v-if="loggedInUser.role === 'student'" to="/my-borrow-requests" class="nav-item" title="Yêu cầu mượn của tôi">📝 <span v-if="!isSidebarCollapsed">Yêu cầu của tôi</span></RouterLink>
         <RouterLink to="/profile" class="nav-item" title="Hồ sơ cá nhân">⚙️ <span v-if="!isSidebarCollapsed">Hồ sơ</span></RouterLink>
       </nav>
     </aside>

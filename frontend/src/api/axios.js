@@ -1,39 +1,36 @@
-import axios from 'axios'; // Đảm bảo đã chạy npm install axios
+import axios from 'axios'
 
-// Tạo một instance của axios với cấu hình cơ bản
+// Tạo instance axios với base URL trỏ đến backend
 const api = axios.create({
   baseURL: 'http://localhost:3000/api',
   headers: {
     'Content-Type': 'application/json'
   }
-});
+})
 
-// Interceptor cho Request: Tự động đính kèm Token vào Header
+// Request interceptor: tự động gắn token từ localStorage vào header
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token')
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`
     }
-    return config;
+    return config
   },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+  (error) => Promise.reject(error)
+)
 
-// Interceptor cho Response: Xử lý lỗi tập trung
+// Response interceptor: nếu 401 → xóa token + về trang login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Nếu nhận được lỗi 401 (Unauthorized), tự động đăng xuất
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login'; // Chuyển hướng trực tiếp
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
     }
-    return Promise.reject(error);
+    return Promise.reject(error)
   }
-);
+)
 
-export default api;
+export default api
