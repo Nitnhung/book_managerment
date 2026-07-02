@@ -6,12 +6,16 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron');
+const ExcelJS = require('exceljs');
 
 const app = express();
 const PORT = process.env.PORT || 5000; // Đảm bảo luôn ưu tiên 5000 nếu .env trống
 const SECRET_KEY = process.env.JWT_SECRET;
 
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173', // Frontend URL
+  credentials: true // Cho phép gửi cookies
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Hỗ trợ thêm định dạng x-www-form-urlencoded (tab Form Data trong Postman)
 
@@ -98,6 +102,66 @@ const verifyToken = (req, res, next) => {
   });
 };
 
+// Hàm tạo refresh token và lưu vào database
+function createRefreshToken(userId, userType = 'user', callback) {
+  const refreshToken = jwt.sign({ id: userId, type: 'refresh' }, SECRET_KEY, {
+    expiresIn: '7d' // Refresh token hết hạn sau 7 ngày
+  });
+
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 ngày
+
+  if (userType === 'librarian') {
+    const sql = 'INSERT INTO librarian_refresh_tokens (librarian_id, token, expires_at) VALUES (?, ?, ?)';
+    db.query(sql, [userId, refreshToken, expiresAt], (err, result) => {
+      if (err) return callback(err);
+      callback(null, refreshToken);
+    });
+  } else {
+    const sql = 'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)';
+    db.query(sql, [userId, refreshToken, expiresAt], (err, result) => {
+      if (err) return callback(err);
+      callback(null, refreshToken);
+    });
+  }
+}
+
+// Hàm xóa refresh token khỏi database
+function revokeRefreshToken(token, userType = 'user', callback) {
+  if (userType === 'librarian') {
+    const sql = 'UPDATE librarian_refresh_tokens SET revoked_at = NOW() WHERE token = ? AND revoked_at IS NULL';
+    db.query(sql, [token], callback);
+  } else {
+    const sql = 'UPDATE refresh_tokens SET revoked_at = NOW() WHERE token = ? AND revoked_at IS NULL';
+    db.query(sql, [token], callback);
+  }
+}
+
+// Hàm kiểm tra refresh token hợp lệ
+function verifyRefreshToken(token, callback) {
+  jwt.verify(token, SECRET_KEY, (err, decoded) => {
+    if (err) return callback(err);
+
+    // Kiểm tra trong database
+    const checkUserSql = 'SELECT * FROM refresh_tokens WHERE token = ? AND revoked_at IS NULL AND expires_at > NOW()';
+    db.query(checkUserSql, [token], (err, results) => {
+      if (err) return callback(err);
+      if (results.length > 0) {
+        return callback(null, { userId: results[0].user_id, userType: 'user' });
+      }
+
+      // Kiểm tra cho librarian
+      const checkLibrarianSql = 'SELECT * FROM librarian_refresh_tokens WHERE token = ? AND revoked_at IS NULL AND expires_at > NOW()';
+      db.query(checkLibrarianSql, [token], (err2, results2) => {
+        if (err2) return callback(err2);
+        if (results2.length > 0) {
+          return callback(null, { userId: results2[0].librarian_id, userType: 'librarian' });
+        }
+        callback(new Error('Refresh token không hợp lệ hoặc đã hết hạn'));
+      });
+    });
+  });
+}
+
 // 1. API Đăng nhập - Hỗ trợ cả Librarian và Student
 app.post('/api/login', (req, res) => {
   console.log('--- [DEBUG] Yêu cầu Đăng nhập ---');
@@ -121,14 +185,28 @@ app.post('/api/login', (req, res) => {
       const passwordIsValid = bcrypt.compareSync(password, user.password);
       if (!passwordIsValid) return res.status(401).json({ error: 'Mật khẩu không chính xác!' });
 
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, {
-        expiresIn: 7200
+      // Tạo access token (ngắn hạn: 15 phút)
+      const accessToken = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, {
+        expiresIn: '15m'
       });
 
-      return res.json({
-        message: 'Đăng nhập thành công!',
-        accessToken: token,
-        user: { id: user.id, username: user.username, fullName: user.fullName, role: user.role }
+      // Tạo refresh token và lưu vào database
+      createRefreshToken(user.id, 'librarian', (err, refreshToken) => {
+        if (err) return res.status(500).json({ error: 'Lỗi tạo refresh token' });
+
+        // Set refresh token vào http-only cookie
+        res.cookie('refreshToken', refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production', // Chỉ gửi qua HTTPS ở production
+          sameSite: 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000 // 7 ngày
+        });
+
+        return res.json({
+          message: 'Đăng nhập thành công!',
+          accessToken: accessToken,
+          user: { id: user.id, username: user.username, fullName: user.fullName, role: user.role }
+        });
       });
     }
 
@@ -148,24 +226,123 @@ app.post('/api/login', (req, res) => {
       const passwordIsValid = bcrypt.compareSync(password, user.password);
       if (!passwordIsValid) return res.status(401).json({ error: 'Mật khẩu không chính xác!' });
 
-      const token = jwt.sign({ id: user.id, username: user.username, role: 'student' }, SECRET_KEY, {
-        expiresIn: 7200
+      // Tạo access token (ngắn hạn: 15 phút)
+      const accessToken = jwt.sign({ id: user.id, username: user.username, role: 'student' }, SECRET_KEY, {
+        expiresIn: '15m'
       });
 
-      return res.json({
-        message: 'Đăng nhập thành công!',
-        accessToken: token,
-        user: {
-          id: user.id,
-          username: user.username,
-          fullName: user.full_name,
-          role: 'student',
-          email: user.email,
-          class: user.class_name
-        }
+      // Tạo refresh token và lưu vào database
+      createRefreshToken(user.id, 'user', (err, refreshToken) => {
+        if (err) return res.status(500).json({ error: 'Lỗi tạo refresh token' });
+
+        // Set refresh token vào http-only cookie
+        res.cookie('refreshToken', refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000 // 7 ngày
+        });
+
+        return res.json({
+          message: 'Đăng nhập thành công!',
+          accessToken: accessToken,
+          user: {
+            id: user.id,
+            username: user.username,
+            fullName: user.full_name,
+            role: 'student',
+            email: user.email,
+            class: user.class_name
+          }
+        });
       });
     });
   });
+});
+
+// API Refresh Token - Lấy access token mới từ refresh token
+app.post('/api/refresh-token', (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Không tìm thấy refresh token' });
+  }
+
+  verifyRefreshToken(refreshToken, (err, tokenData) => {
+    if (err) {
+      // Xóa cookie nếu refresh token không hợp lệ
+      res.clearCookie('refreshToken');
+      return res.status(401).json({ error: 'Refresh token không hợp lệ hoặc đã hết hạn' });
+    }
+
+    const { userId, userType } = tokenData;
+
+    // Lấy thông tin user để tạo access token mới
+    if (userType === 'librarian') {
+      const sql = 'SELECT * FROM librarians WHERE id = ?';
+      db.query(sql, [userId], (err, results) => {
+        if (err || results.length === 0) {
+          res.clearCookie('refreshToken');
+          return res.status(401).json({ error: 'Không tìm thấy người dùng' });
+        }
+
+        const user = results[0];
+        const newAccessToken = jwt.sign(
+          { id: user.id, username: user.username, role: user.role },
+          SECRET_KEY,
+          { expiresIn: '15m' }
+        );
+
+        res.json({ accessToken: newAccessToken });
+      });
+    } else {
+      const sql = `
+        SELECT u.*, ud.class_name
+        FROM users u
+        LEFT JOIN user_details ud ON u.id = ud.user_id
+        WHERE u.id = ?
+      `;
+      db.query(sql, [userId], (err, results) => {
+        if (err || results.length === 0) {
+          res.clearCookie('refreshToken');
+          return res.status(401).json({ error: 'Không tìm thấy người dùng' });
+        }
+
+        const user = results[0];
+        const newAccessToken = jwt.sign(
+          { id: user.id, username: user.username, role: 'student' },
+          SECRET_KEY,
+          { expiresIn: '15m' }
+        );
+
+        res.json({ accessToken: newAccessToken });
+      });
+    }
+  });
+});
+
+// API Logout - Xóa refresh token
+app.post('/api/logout', (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+
+  if (refreshToken) {
+    // Xóa refresh token khỏi database
+    revokeRefreshToken(refreshToken, 'user', (err) => {
+      if (err) {
+        // Nếu lỗi với user, thử với librarian
+        revokeRefreshToken(refreshToken, 'librarian', () => {});
+      }
+    });
+
+    // Xóa cookie
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict'
+    });
+  }
+
+  res.json({ message: 'Đăng xuất thành công!' });
 });
 
 // 1.0 Hàm hỗ trợ: Đăng nhập với vai trò Sinh viên (username chính là MSV)
@@ -299,6 +476,15 @@ app.get('/api/books/copies-by-title', (req, res) => {
   });
 });
 
+// 1.2b API Lấy danh sách thể loại
+app.get('/api/categories', (req, res) => {
+  const sql = 'SELECT id, category_name FROM categories ORDER BY category_name ASC';
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
+});
+
 // 1.2c API Danh sách đầu sách (gom theo title + author + year + category)
 app.get('/api/books/grouped', (req, res) => {
   const sql = `
@@ -319,20 +505,30 @@ app.get('/api/books/grouped', (req, res) => {
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
 
-    const categoryMap = { 1: 'Công nghệ thông tin', 2: 'Văn học', 3: 'Khoa học' };
-    const mapped = results.map(row => ({
-      title: row.title,
-      author: row.author,
-      year: row.published_year,
-      categoryId: row.category_id,
-      category: categoryMap[row.category_id] || 'Khác',
-      totalCopies: row.totalCopies,
-      availableCopies: row.availableCopies,
-      isAvailable: row.availableCopies > 0,
-      sampleId: row.availableBookId || row.sampleId // Ưu tiên ID của sách còn trống
-    }));
+    // Lấy tên thể loại từ bảng categories
+    const categoryIds = [...new Set(results.map(r => r.category_id))];
+    const placeholders = categoryIds.map(() => '?').join(',');
 
-    res.json(mapped);
+    db.query(`SELECT id, category_name FROM categories WHERE id IN (${placeholders})`, categoryIds, (err2, categories) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      const categoryMap = {};
+      categories.forEach(c => categoryMap[c.id] = c.category_name);
+
+      const mapped = results.map(row => ({
+        title: row.title,
+        author: row.author,
+        year: row.published_year,
+        categoryId: row.category_id,
+        category: categoryMap[row.category_id] || 'Khác',
+        totalCopies: row.totalCopies,
+        availableCopies: row.availableCopies,
+        isAvailable: row.availableCopies > 0,
+        sampleId: row.availableBookId || row.sampleId
+      }));
+
+      res.json(mapped);
+    });
   });
 });
 
@@ -373,20 +569,49 @@ app.post('/api/books', verifyToken, authorize(['admin', 'librarian']), (req, res
   const author = sanitizeInput(req.body.author);
   const isbn = sanitizeInput(req.body.isbn || '');
   const published_year = parseInt(req.body.year);
-  const category_id = parseInt(req.body.category);
+  const categoryInput = req.body.category; // Có thể là ID (số) hoặc tên thể loại (chuỗi)
   const quantity = parseInt(req.body.quantity) || 1;
 
-  // Tạo mảng dữ liệu để insert hàng loạt (bulk insert)
-  const values = [];
-  for (let i = 0; i < quantity; i++) {
-    values.push([title, isbn, author, published_year, category_id, 1]); // Thêm '1' cho status (Sẵn sàng)
-  }
+  // Xử lý category: nếu là số thì lấy ID, nếu là chuỗi thì tìm hoặc tạo mới
+  const handleCategory = (callback) => {
+    // Nếu categoryInput là số, coi như category_id
+    if (!isNaN(parseInt(categoryInput))) {
+      return callback(null, parseInt(categoryInput));
+    }
 
-  const sql = 'INSERT INTO books (title, isbn, author, published_year, category_id, status) VALUES ?';
-  
-  db.query(sql, [values], (err, result) => {
+    // Nếu là chuỗi, tìm trong bảng categories
+    const categoryName = sanitizeInput(categoryInput);
+    db.query('SELECT id FROM categories WHERE category_name = ?', [categoryName], (err, results) => {
+      if (err) return callback(err);
+
+      if (results.length > 0) {
+        // Đã tồn tại, trả về ID
+        return callback(null, results[0].id);
+      }
+
+      // Chưa tồn tại, insert mới
+      db.query('INSERT INTO categories (category_name) VALUES (?)', [categoryName], (err2, result) => {
+        if (err2) return callback(err2);
+        callback(null, result.insertId);
+      });
+    });
+  };
+
+  handleCategory((err, category_id) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: `Đã thêm thành công ${quantity} quyển sách!`, count: result.affectedRows });
+
+    // Tạo mảng dữ liệu để insert hàng loạt (bulk insert)
+    const values = [];
+    for (let i = 0; i < quantity; i++) {
+      values.push([title, isbn, author, published_year, category_id, 1]); // Thêm '1' cho status (Sẵn sàng)
+    }
+
+    const sql = 'INSERT INTO books (title, isbn, author, published_year, category_id, status) VALUES ?';
+    
+    db.query(sql, [values], (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: `Đã thêm thành công ${quantity} quyển sách!`, count: result.affectedRows });
+    });
   });
 });
 
@@ -878,9 +1103,35 @@ app.put('/api/borrow-requests/:id/approve', verifyToken, authorize(['admin', 'li
 app.put('/api/borrow-requests/:id/reject', verifyToken, authorize(['admin', 'librarian']), (req, res) => {
   const id = req.params.id;
   
-  db.query('UPDATE borrow_requests SET status = "rejected" WHERE id = ?', [id], (err) => {
+  db.query('UPDATE borrow_requests SET status = "rejected", approved_date = NOW() WHERE id = ?', [id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Đã từ chối yêu cầu mượn sách!' });
+  });
+});
+
+// 6.2b API: Sinh viên xem lịch sử yêu cầu mượn của chính mình
+app.get('/api/my-borrow-requests', verifyToken, authorize(['student']), (req, res) => {
+  const userId = req.userId;
+
+  const sql = `
+    SELECT
+      br.id,
+      br.status,
+      DATE_FORMAT(br.request_date, '%Y-%m-%d %H:%i') AS requestDate,
+      DATE_FORMAT(br.borrow_date,  '%Y-%m-%d')        AS borrowDate,
+      DATE_FORMAT(br.due_date,     '%Y-%m-%d')        AS dueDate,
+      DATE_FORMAT(br.approved_date,'%Y-%m-%d %H:%i') AS approvedDate,
+      b.title  AS bookTitle,
+      b.author AS bookAuthor
+    FROM borrow_requests br
+    JOIN books b ON br.book_id = b.id
+    WHERE br.user_id = ?
+    ORDER BY br.request_date DESC
+  `;
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
   });
 });
 
@@ -1249,44 +1500,42 @@ app.post('/api/send-custom-email', verifyToken, authorize(['admin', 'librarian']
     return res.status(404).json({ error: 'Không tìm thấy sinh viên nào có email hợp lệ!' });
   }
 
-  const successes = [];
-  const failures  = [];
+  // Tách riêng người có email và không có email
+  const withEmail    = msvList.filter(s => s.email);
+  const withoutEmail = msvList.filter(s => !s.email).map(s => ({
+    studentEmail: '(không có email)', studentName: s.fullName, MSV: s.MSV, error: 'Chưa có email'
+  }));
 
-  for (const student of msvList) {
-    if (!student.email) {
-      failures.push({ studentEmail: '(không có email)', studentName: student.fullName, MSV: student.MSV, error: 'Chưa có email' });
-      continue;
-    }
+  // Gửi song song theo batch 5 — nhanh hơn tuần tự, an toàn với Gmail
+  const { successes, failures } = await sendInBatches(withEmail, async (student) => {
     const mailOptions = {
-      from: '"Thư Viện FPT" <' + process.env.EMAIL_USER + '>',
-      to: student.email,
-      subject: subject,
+      from: `"Thư Viện FPT" <${process.env.EMAIL_USER}>`,
+      to:   student.email,
+      subject,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
           <h2 style="color: #42b983;">Xin chào ${student.fullName} (MSV: ${student.MSV}),</h2>
-          <div style="margin: 20px 0; line-height: 1.6;">
-            ${emailMessage.replace(/\n/g, '<br/>')}
-          </div>
-          <br/>
-          <p>Trân trọng,</p>
+          <div style="margin: 20px 0; line-height: 1.6;">${emailMessage.replace(/\n/g, '<br/>')}</div>
+          <br/><p>Trân trọng,</p>
           <p><strong>Ban Quản Trị Thư Viện FPT</strong></p>
         </div>
       `
     };
-    try {
-      await transporter.sendMail(mailOptions);
-      successes.push({ studentEmail: student.email, studentName: student.fullName, MSV: student.MSV, status: 'success' });
-    } catch (mailErr) {
-      failures.push({ studentEmail: student.email, studentName: student.fullName, MSV: student.MSV, error: mailErr.message, status: 'error' });
-    }
-  }
+    await transporter.sendMail(mailOptions);
+    return { studentEmail: student.email, studentName: student.fullName, MSV: student.MSV, status: 'success' };
+  });
+
+  const allFailures = [
+    ...failures.map(f => ({ studentEmail: f.email || f.studentEmail, studentName: f.fullName, error: f.error, status: 'error' })),
+    ...withoutEmail
+  ];
 
   res.json({
-    message: `Gửi email hoàn tất. Thành công: ${successes.length}, Thất bại: ${failures.length}`,
+    message: `Gửi email hoàn tất. Thành công: ${successes.length}, Thất bại: ${allFailures.length}`,
     successCount: successes.length,
-    failedCount: failures.length,
+    failedCount:  allFailures.length,
     successes,
-    failures
+    failures: allFailures
   });
 });
 
@@ -1312,11 +1561,198 @@ app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
     error: err.message || 'Đã có lỗi xảy ra phía Server!',
-    stack: process.env.NODE_ENV === 'development' ? err.stack : {} // Chỉ hiện lỗi chi tiết khi dev
+    stack: process.env.NODE_ENV === 'development' ? err.stack : {}
   });
 });
 
-// Middleware xử lý khi người dùng gọi sai URL hoặc sai Phương thức (GET/POST/PUT/DELETE)
+// ============================================================
+// HELPER: Tạo file Excel đẹp với ExcelJS
+// ============================================================
+function buildExcelWorkbook(sheetName, columns, rows) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'FPT Library System';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet(sheetName, {
+    views: [{ state: 'frozen', ySplit: 1 }]
+  });
+
+  ws.columns = columns.map(col => ({ key: col.key, width: col.width || 18 }));
+
+  const headerRow = ws.addRow(columns.map(c => c.label));
+  headerRow.height = 22;
+  headerRow.eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+    cell.border    = {
+      top:    { style: 'thin', color: { argb: 'FF1A252F' } },
+      bottom: { style: 'thin', color: { argb: 'FF1A252F' } },
+      left:   { style: 'thin', color: { argb: 'FF1A252F' } },
+      right:  { style: 'thin', color: { argb: 'FF1A252F' } },
+    };
+  });
+
+  rows.forEach((row, rowIndex) => {
+    const dataRow = ws.addRow(columns.map(c => row[c.key] ?? ''));
+    const isEven  = rowIndex % 2 === 1;
+    dataRow.height = 18;
+    dataRow.eachCell(cell => {
+      cell.font      = { size: 10 };
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' } };
+      cell.alignment = { vertical: 'middle', wrapText: false };
+      cell.border    = {
+        top:    { style: 'hair', color: { argb: 'FFDDDDDD' } },
+        bottom: { style: 'hair', color: { argb: 'FFDDDDDD' } },
+        left:   { style: 'hair', color: { argb: 'FFDDDDDD' } },
+        right:  { style: 'hair', color: { argb: 'FFDDDDDD' } },
+      };
+    });
+  });
+
+  ws.columns.forEach((col, colIdx) => {
+    const configWidth = columns[colIdx]?.width || 18;
+    let maxLen = columns[colIdx]?.label?.length || 10;
+    rows.forEach(row => {
+      const val = row[columns[colIdx]?.key];
+      const len = val != null ? String(val).length : 0;
+      if (len > maxLen) maxLen = len;
+    });
+    col.width = Math.min(Math.max(maxLen + 2, 10), configWidth + 10);
+  });
+
+  return wb;
+}
+
+// --- API Export: trả về file Excel đẹp ---
+app.get('/api/export/:type', verifyToken, authorize(['admin', 'librarian']), async (req, res) => {
+  const { type } = req.params;
+  const { status, from, to } = req.query;
+
+  try {
+    let sheetName, fileName, columns, rows;
+
+    if (type === 'books') {
+      sheetName = 'Danh sách sách'; fileName = 'DanhSachSach';
+      columns = [
+        { key: 'title',           label: 'Tên sách',      width: 38 },
+        { key: 'author',          label: 'Tác giả',       width: 28 },
+        { key: 'category',        label: 'Thể loại',      width: 22 },
+        { key: 'year',            label: 'Năm XB',        width: 10 },
+        { key: 'totalCopies',     label: 'Tổng SL',       width: 12 },
+        { key: 'availableCopies', label: 'Còn sẵn',       width: 12 },
+        { key: 'isAvailable',     label: 'Trạng thái',    width: 15 },
+      ];
+      const [books] = await db.promise().query(`
+        SELECT title, author, published_year AS year, category_id,
+               COUNT(*) AS totalCopies,
+               SUM(CASE WHEN status=1 THEN 1 ELSE 0 END) AS availableCopies
+        FROM books GROUP BY title, author, published_year, category_id ORDER BY title
+      `);
+      const catMap = { 1:'Công nghệ thông tin', 2:'Văn học', 3:'Khoa học' };
+      rows = books.map(b => ({
+        ...b, category: catMap[b.category_id] || 'Khác',
+        isAvailable: b.availableCopies > 0 ? 'Còn sách' : 'Hết sách',
+      }));
+      if (status === 'available')   rows = rows.filter(r => r.isAvailable === 'Còn sách');
+      if (status === 'unavailable') rows = rows.filter(r => r.isAvailable === 'Hết sách');
+    }
+
+    else if (type === 'students') {
+      sheetName = 'Danh sách sinh viên'; fileName = 'DanhSachSinhVien';
+      columns = [
+        { key: 'MSV',      label: 'Mã sinh viên', width: 16 },
+        { key: 'fullName', label: 'Họ và tên',    width: 32 },
+        { key: 'class',    label: 'Lớp',          width: 14 },
+        { key: 'email',    label: 'Email',         width: 34 },
+      ];
+      const [students] = await db.promise().query(`
+        SELECT u.username AS MSV, u.full_name AS fullName,
+               ud.class_name AS class, u.email
+        FROM users u LEFT JOIN user_details ud ON u.id = ud.user_id
+        WHERE u.role_id = 3 ORDER BY u.username
+      `);
+      rows = students;
+    }
+
+    else if (type === 'borrows_active') {
+      sheetName = 'Sách đang mượn'; fileName = 'SachDangMuon';
+      columns = [
+        { key: 'MSV',       label: 'Mã sinh viên', width: 16 },
+        { key: 'fullName',  label: 'Họ và tên',    width: 30 },
+        { key: 'class',     label: 'Lớp',          width: 14 },
+        { key: 'nameBook',  label: 'Tên sách',     width: 38 },
+        { key: 'timeStart', label: 'Ngày mượn',    width: 14 },
+        { key: 'timeEnd',   label: 'Hạn trả',      width: 14 },
+      ];
+      const [borrows] = await db.promise().query(`
+        SELECT u.username AS MSV, u.full_name AS fullName,
+               ud.class_name AS class, b.title AS nameBook,
+               DATE_FORMAT(bb.borrow_date,'%d/%m/%Y') AS timeStart,
+               DATE_FORMAT(bb.due_date,'%d/%m/%Y')    AS timeEnd
+        FROM borrow_books bb
+        JOIN books b ON bb.book_id = b.id
+        JOIN users u ON bb.user_id = u.id
+        LEFT JOIN user_details ud ON u.id = ud.user_id
+        WHERE bb.status = 1 ORDER BY bb.borrow_date DESC
+      `);
+      rows = borrows;
+    }
+
+    else if (type === 'borrows_history') {
+      sheetName = 'Lịch sử mượn'; fileName = 'LichSuMuonSach';
+      columns = [
+        { key: 'MSV',        label: 'Mã sinh viên',  width: 16 },
+        { key: 'fullName',   label: 'Họ và tên',     width: 30 },
+        { key: 'class',      label: 'Lớp',           width: 14 },
+        { key: 'nameBook',   label: 'Tên sách',      width: 38 },
+        { key: 'timeStart',  label: 'Ngày mượn',     width: 14 },
+        { key: 'timeEnd',    label: 'Hạn trả',       width: 14 },
+        { key: 'returnDate', label: 'Ngày trả thực', width: 16 },
+        { key: 'status',     label: 'Trạng thái',    width: 14 },
+      ];
+      let sql = `
+        SELECT u.username AS MSV, u.full_name AS fullName,
+               ud.class_name AS class, b.title AS nameBook,
+               DATE_FORMAT(bb.borrow_date,'%d/%m/%Y')  AS timeStart,
+               DATE_FORMAT(bb.due_date,'%d/%m/%Y')     AS timeEnd,
+               DATE_FORMAT(bb.return_date,'%d/%m/%Y')  AS returnDate,
+               bb.status
+        FROM borrow_books bb
+        JOIN books b ON bb.book_id = b.id
+        JOIN users u ON bb.user_id = u.id
+        LEFT JOIN user_details ud ON u.id = ud.user_id
+        WHERE 1=1
+      `;
+      const params = [];
+      if (status === '1') { sql += ' AND bb.status = 1'; }
+      if (status === '0') { sql += ' AND bb.status = 0'; }
+      if (from) { sql += ' AND bb.borrow_date >= ?'; params.push(from); }
+      if (to)   { sql += ' AND bb.borrow_date <= ?'; params.push(to + ' 23:59:59'); }
+      sql += ' ORDER BY bb.borrow_date DESC';
+      const [history] = await db.promise().query(sql, params);
+      rows = history.map(r => ({ ...r, status: r.status === 1 ? 'Đang mượn' : 'Đã trả' }));
+    }
+
+    else {
+      return res.status(400).json({ error: 'Loại báo cáo không hợp lệ!' });
+    }
+
+    const wb   = buildExcelWorkbook(sheetName, columns, rows);
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    res.setHeader('Content-Type',        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}_${date}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error('Export error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Middleware xử lý khi người dùng gọi sai URL
 // LUÔN ĐẶT Ở CUỐI CÙNG SAU TẤT CẢ CÁC ROUTE KHÁC
 app.use((req, res) => {
   res.status(404).json({
@@ -1324,9 +1760,267 @@ app.use((req, res) => {
   });
 });
 
+/**
+ * Style chung cho toàn bộ file Excel xuất ra
+ * Header: nền xanh đậm, chữ trắng, bold, border
+ * Data:   border, zebra striping (dòng chẵn xám nhạt)
+ * Cột:    auto-fit dựa trên nội dung thực tế
+ */
+function buildExcelWorkbook(sheetName, columns, rows) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'FPT Library System';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet(sheetName, {
+    views: [{ state: 'frozen', ySplit: 1 }] // Freeze hàng header
+  });
+
+  // --- Định nghĩa cột ---
+  ws.columns = columns.map(col => ({
+    key:   col.key,
+    width: col.width || 18,
+  }));
+
+  // --- Header row ---
+  const headerRow = ws.addRow(columns.map(c => c.label));
+  headerRow.height = 22;
+  headerRow.eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+    cell.border    = {
+      top:    { style: 'thin', color: { argb: 'FF1A252F' } },
+      bottom: { style: 'thin', color: { argb: 'FF1A252F' } },
+      left:   { style: 'thin', color: { argb: 'FF1A252F' } },
+      right:  { style: 'thin', color: { argb: 'FF1A252F' } },
+    };
+  });
+
+  // --- Data rows ---
+  rows.forEach((row, rowIndex) => {
+    const dataRow = ws.addRow(columns.map(c => row[c.key] ?? ''));
+    const isEven  = rowIndex % 2 === 1; // zebra striping
+
+    dataRow.height = 18;
+    dataRow.eachCell(cell => {
+      cell.font      = { size: 10 };
+      cell.fill      = {
+        type: 'pattern', pattern: 'solid',
+        fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
+      };
+      cell.alignment = { vertical: 'middle', wrapText: false };
+      cell.border    = {
+        top:    { style: 'hair', color: { argb: 'FFDDDDDD' } },
+        bottom: { style: 'hair', color: { argb: 'FFDDDDDD' } },
+        left:   { style: 'hair', color: { argb: 'FFDDDDDD' } },
+        right:  { style: 'hair', color: { argb: 'FFDDDDDD' } },
+      };
+    });
+  });
+
+  // --- Auto-fit độ rộng cột dựa trên nội dung thực ---
+  ws.columns.forEach((col, colIdx) => {
+    const configWidth = columns[colIdx]?.width || 18;
+    let maxLen = columns[colIdx]?.label?.length || 10;
+
+    rows.forEach(row => {
+      const val = row[columns[colIdx]?.key];
+      const len = val != null ? String(val).length : 0;
+      if (len > maxLen) maxLen = len;
+    });
+
+    // Không để cột quá rộng hoặc quá hẹp
+    col.width = Math.min(Math.max(maxLen + 2, 10), configWidth + 10);
+  });
+
+  return wb;
+}
+
+// --- API Export ---
+// Dùng chung 1 endpoint, phân biệt loại báo cáo qua query param `type`
+app.get('/api/export/:type', verifyToken, authorize(['admin', 'librarian']), async (req, res) => {
+  const { type } = req.params;
+  const { status, from, to } = req.query;  // filter params
+
+  try {
+    let sheetName, fileName, columns, rows;
+
+    // ---- 1. Danh sách sách ----
+    if (type === 'books') {
+      sheetName = 'Danh sách sách';
+      fileName  = 'DanhSachSach';
+      columns = [
+        { key: 'title',           label: 'Tên sách',         width: 38 },
+        { key: 'author',          label: 'Tác giả',          width: 28 },
+        { key: 'category',        label: 'Thể loại',         width: 22 },
+        { key: 'year',            label: 'Năm XB',           width: 10 },
+        { key: 'totalCopies',     label: 'Tổng số lượng',    width: 15 },
+        { key: 'availableCopies', label: 'Còn sẵn',          width: 12 },
+        { key: 'isAvailable',     label: 'Trạng thái',       width: 15 },
+      ];
+      const [books] = await db.promise().query(`
+        SELECT title, author, published_year AS year, category_id,
+               COUNT(*) AS totalCopies,
+               SUM(CASE WHEN status=1 THEN 1 ELSE 0 END) AS availableCopies
+        FROM books GROUP BY title, author, published_year, category_id ORDER BY title
+      `);
+      const catMap = { 1:'Công nghệ thông tin', 2:'Văn học', 3:'Khoa học' };
+      rows = books.map(b => ({
+        ...b,
+        category:    catMap[b.category_id] || 'Khác',
+        isAvailable: b.availableCopies > 0 ? 'Còn sách' : 'Hết sách',
+      }));
+    }
+
+    // ---- 2. Danh sách sinh viên ----
+    else if (type === 'students') {
+      sheetName = 'Danh sách sinh viên';
+      fileName  = 'DanhSachSinhVien';
+      columns = [
+        { key: 'MSV',      label: 'Mã sinh viên', width: 16 },
+        { key: 'fullName', label: 'Họ và tên',    width: 32 },
+        { key: 'class',    label: 'Lớp',          width: 14 },
+        { key: 'email',    label: 'Email',         width: 34 },
+      ];
+      const [students] = await db.promise().query(`
+        SELECT u.username AS MSV, u.full_name AS fullName,
+               ud.class_name AS class, u.email
+        FROM users u
+        LEFT JOIN user_details ud ON u.id = ud.user_id
+        WHERE u.role_id = 3 ORDER BY u.username
+      `);
+      rows = students;
+    }
+
+    // ---- 3. Sách đang mượn ----
+    else if (type === 'borrows_active') {
+      sheetName = 'Sách đang mượn';
+      fileName  = 'SachDangMuon';
+      columns = [
+        { key: 'MSV',       label: 'Mã sinh viên', width: 16 },
+        { key: 'fullName',  label: 'Họ và tên',    width: 30 },
+        { key: 'class',     label: 'Lớp',          width: 14 },
+        { key: 'nameBook',  label: 'Tên sách',     width: 38 },
+        { key: 'timeStart', label: 'Ngày mượn',    width: 14 },
+        { key: 'timeEnd',   label: 'Hạn trả',      width: 14 },
+      ];
+      const [borrows] = await db.promise().query(`
+        SELECT u.username AS MSV, u.full_name AS fullName,
+               ud.class_name AS class, b.title AS nameBook,
+               DATE_FORMAT(bb.borrow_date,'%d/%m/%Y') AS timeStart,
+               DATE_FORMAT(bb.due_date,'%d/%m/%Y')    AS timeEnd
+        FROM borrow_books bb
+        JOIN books b ON bb.book_id = b.id
+        JOIN users u ON bb.user_id = u.id
+        LEFT JOIN user_details ud ON u.id = ud.user_id
+        WHERE bb.status = 1 ORDER BY bb.borrow_date DESC
+      `);
+      rows = borrows;
+    }
+
+    // ---- 4. Lịch sử mượn sách ----
+    else if (type === 'borrows_history') {
+      sheetName = 'Lịch sử mượn';
+      fileName  = 'LichSuMuonSach';
+      columns = [
+        { key: 'MSV',        label: 'Mã sinh viên',   width: 16 },
+        { key: 'fullName',   label: 'Họ và tên',      width: 30 },
+        { key: 'class',      label: 'Lớp',            width: 14 },
+        { key: 'nameBook',   label: 'Tên sách',       width: 38 },
+        { key: 'timeStart',  label: 'Ngày mượn',      width: 14 },
+        { key: 'timeEnd',    label: 'Hạn trả',        width: 14 },
+        { key: 'returnDate', label: 'Ngày trả thực',  width: 16 },
+        { key: 'status',     label: 'Trạng thái',     width: 14 },
+      ];
+
+      let sql = `
+        SELECT u.username AS MSV, u.full_name AS fullName,
+               ud.class_name AS class, b.title AS nameBook,
+               DATE_FORMAT(bb.borrow_date,'%d/%m/%Y')   AS timeStart,
+               DATE_FORMAT(bb.due_date,'%d/%m/%Y')      AS timeEnd,
+               DATE_FORMAT(bb.return_date,'%d/%m/%Y')   AS returnDate,
+               bb.status
+        FROM borrow_books bb
+        JOIN books b ON bb.book_id = b.id
+        JOIN users u ON bb.user_id = u.id
+        LEFT JOIN user_details ud ON u.id = ud.user_id
+        WHERE 1=1
+      `;
+      const params = [];
+      if (status === '1') { sql += ' AND bb.status = 1'; }
+      if (status === '0') { sql += ' AND bb.status = 0'; }
+      if (from) { sql += ' AND bb.borrow_date >= ?'; params.push(from); }
+      if (to)   { sql += ' AND bb.borrow_date <= ?'; params.push(to + ' 23:59:59'); }
+      sql += ' ORDER BY bb.borrow_date DESC';
+
+      const [history] = await db.promise().query(sql, params);
+      rows = history.map(r => ({ ...r, status: r.status === 1 ? 'Đang mượn' : 'Đã trả' }));
+    }
+
+    else {
+      return res.status(400).json({ error: 'Loại báo cáo không hợp lệ!' });
+    }
+
+    // --- Tạo workbook và stream về client ---
+    const wb = buildExcelWorkbook(sheetName, columns, rows);
+    const date = new Date().toISOString().slice(0,10).replace(/-/g,'');
+
+    res.setHeader('Content-Type',        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}_${date}.xlsx"`);
+
+    await wb.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error('Export error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================
 // CRON JOB: Tự động gửi email nhắc nhở hàng ngày lúc 8:00 sáng
 // ============================================================
+
+/**
+ * Helper: Gửi email theo batch để tối ưu tốc độ mà không bị Gmail chặn.
+ *
+ * Tại sao batch thay vì Promise.all toàn bộ?
+ * - Promise.all(50 emails) → gửi 50 cái cùng lúc → Gmail rate limit → block
+ * - Batch 5: gửi 5 song song, xong batch → gửi 5 tiếp theo
+ * - Tốc độ: 10x nhanh hơn tuần tự, an toàn với Gmail free tier
+ *
+ * @param {Array}    items         - Mảng các object cần gửi
+ * @param {Function} sendOneFn     - Async function nhận 1 item, trả về { success, data }
+ * @param {number}   batchSize     - Số email gửi song song mỗi batch (mặc định 5)
+ * @returns {{ successes, failures }}
+ */
+async function sendInBatches(items, sendOneFn, batchSize = 5) {
+  const successes = [];
+  const failures  = [];
+
+  // Chia items thành các nhóm batchSize phần tử
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+
+    // Gửi song song trong batch bằng Promise.allSettled
+    // allSettled (không phải all): không throw ngay cả khi 1 cái fail
+    const results = await Promise.allSettled(
+      batch.map(item => sendOneFn(item))
+    );
+
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        successes.push(result.value);
+      } else {
+        failures.push({ ...batch[idx], error: result.reason?.message || 'Unknown error' });
+      }
+    });
+
+    console.log(`  📦 Batch ${Math.floor(i / batchSize) + 1}: ${batch.length} email (✅${results.filter(r=>r.status==='fulfilled').length} ❌${results.filter(r=>r.status==='rejected').length})`);
+  }
+
+  return { successes, failures };
+}
 
 /**
  * Hàm gửi email nhắc nhở - dùng chung cho cả cron và API thủ công
@@ -1357,48 +2051,44 @@ async function sendReminderEmailsJob(limit = null) {
         return resolve({ successCount: 0, failedCount: 0, successes: [], failures: [] });
       }
 
-      console.log(`📬 [Cron] Bắt đầu gửi email cho ${results.length} sinh viên...`);
+      console.log(`📬 [Cron] Gửi email cho ${results.length} sinh viên (batch 5)...`);
 
-      const successes = [];
-      const failures  = [];
+      // Lọc bỏ record không có email trước
+      const withEmail    = results.filter(r => r.email);
+      const withoutEmail = results.filter(r => !r.email).map(r => ({
+        studentEmail: '(không có email)', MSV: r.MSV, error: 'Chưa có email'
+      }));
 
-      for (const record of results) {
-        if (!record.email) {
-          failures.push({ studentEmail: '(không có email)', MSV: record.MSV });
-          continue;
-        }
-
+      const { successes, failures } = await sendInBatches(withEmail, async (record) => {
         const mailOptions = {
           from: `"Thư Viện FPT" <${process.env.EMAIL_USER}>`,
-          to: record.email,
+          to:   record.email,
           subject: '⏰ Nhắc Nhở Hạn Trả Sách - Thư Viện FPT',
           html: `
             <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
               <h2 style="color: #42b983;">Xin chào ${record.fullName} (MSV: ${record.MSV}),</h2>
-              <p>Hệ thống thư viện xin thông báo:</p>
-              <p>Cuốn sách <strong>"${record.nameBook}"</strong> bạn đang mượn
-                 sắp đến hạn trả vào ngày
+              <p>Cuốn sách <strong>"${record.nameBook}"</strong> sắp đến hạn trả vào ngày
                  <strong>${new Date(record.timeEnd).toLocaleDateString('vi-VN')}</strong>.</p>
-              <p>Vui lòng sắp xếp thời gian đến thư viện để trả sách đúng hạn!</p>
-              <br/>
-              <p>Trân trọng,</p>
+              <p>Vui lòng đến thư viện để trả sách đúng hạn!</p>
+              <br/><p>Trân trọng,</p>
               <p><strong>Ban Quản Trị Thư Viện FPT</strong></p>
             </div>
           `
         };
+        await transporter.sendMail(mailOptions);
+        console.log(`    ✅ → ${record.email}`);
+        return { studentEmail: record.email, bookTitle: record.nameBook };
+      });
 
-        try {
-          await transporter.sendMail(mailOptions);
-          successes.push({ studentEmail: record.email, bookTitle: record.nameBook });
-          console.log(`  ✅ Đã gửi → ${record.email}`);
-        } catch (mailErr) {
-          failures.push({ studentEmail: record.email, error: mailErr.message });
-          console.error(`  ❌ Thất bại → ${record.email}:`, mailErr.message);
-        }
-      }
+      const allFailures = [...failures.map(f => ({ studentEmail: f.email || f.studentEmail, error: f.error })), ...withoutEmail];
 
-      console.log(`📊 [Cron] Hoàn tất: ✅ ${successes.length} thành công, ❌ ${failures.length} thất bại`);
-      resolve({ successCount: successes.length, failedCount: failures.length, successes, failures });
+      console.log(`📊 [Cron] Hoàn tất: ✅ ${successes.length} thành công, ❌ ${allFailures.length} thất bại`);
+      resolve({
+        successCount: successes.length,
+        failedCount:  allFailures.length,
+        successes,
+        failures: allFailures
+      });
     });
   });
 }

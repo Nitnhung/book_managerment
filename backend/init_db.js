@@ -119,17 +119,6 @@ connection.connect((err) => {
           FOREIGN KEY (user_id) REFERENCES users(id),
           FOREIGN KEY (approved_by) REFERENCES users(id)
       );
-
-      CREATE TABLE IF NOT EXISTS borrow_records (
-          IdRent INT AUTO_INCREMENT PRIMARY KEY,
-          book_id INT NOT NULL,
-          IdUser INT NOT NULL,
-          MSV VARCHAR(50) NOT NULL,
-          timeStart DATETIME NOT NULL,
-          timeEnd DATETIME NOT NULL,
-          status TINYINT(1) DEFAULT 1,
-          returnActualDate DATETIME
-      );
     `;
 
     connection.query(createTablesQuery, (err) => {
